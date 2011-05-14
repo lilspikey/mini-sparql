@@ -52,7 +52,28 @@ def match_triples(pattern, existing=None):
     triple = tuple(existing.get(_var_name(a), a) for a in pattern)
     for a, b, c in _triples:
         if _matches(triple, (a, b, c)):
-            yield _get_matches(pattern, (a, b, c))
+            matches = _get_matches(pattern, (a, b, c))
+            matches.update(existing)
+            yield matches
+
+def _join(previous, pattern):
+    for p in previous:
+        for match in match_triples(pattern, p):
+            yield match
+
+def query(q):
+    p = parse_query(q)
+    name, variables, patterns = p.query
+    
+    p = None
+    for pattern in patterns:
+        if p is None:
+            p = match_triples(pattern)
+        else:
+            p = _join(p, pattern)
+    
+    for match in p:
+        yield tuple(match.get(_var_name(v)) for v in variables)
 
 if __name__ == '__main__':
     queries = [
@@ -74,3 +95,10 @@ if __name__ == '__main__':
     for q in queries:
         print q
         print parse_query(q)
+    
+    add_triples(('a', 'name', 'c'), ('b', 'name', 'd'), ('a', 'weight', 'c'),
+                ('c', 'weight', '5'))
+    
+    print list(query('SELECT ?id ?value WHERE { ?id name ?value }'))
+    print list(query('SELECT ?id ?value WHERE { ?id name ?value . ?id weight ?value }'))
+    print list(query('SELECT ?id ?weight WHERE { ?id name ?value . ?value weight ?weight }'))
