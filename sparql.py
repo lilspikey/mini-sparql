@@ -1,27 +1,31 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       Optional, ZeroOrMore
 
-variable = Combine('?' + Word(alphas))
-variables = OneOrMore(variable)
+def _query_parser():
+    variable = Combine('?' + Word(alphas))
+    variables = OneOrMore(variable)
 
-literal = Regex(r'[^\s]+')
-triple_value = variable | literal
+    literal = Regex(r'[^\s]+')
+    triple_value = variable | literal
 
-triple = Group(triple_value + triple_value + triple_value + Optional(Literal('.').suppress()))
-triples = OneOrMore(triple)
+    triple = Group(triple_value + triple_value + triple_value + Optional(Literal('.').suppress()))
+    triples = OneOrMore(triple)
 
-prefix = Group(Literal('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
+    prefix = Group(Literal('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
 
-prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
+    prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
 
-select_query = 'SELECT' + Group(variables) + Literal('WHERE').suppress() + Literal('{').suppress() + \
-            Group(triples) + \
-       Literal('}').suppress()
+    select_query = 'SELECT' + Group(variables) + Literal('WHERE').suppress() + Literal('{').suppress() + \
+                Group(triples) + \
+           Literal('}').suppress()
 
-query = prologue + Group(select_query).setResultsName('query')
+    query = prologue + Group(select_query).setResultsName('query')
+    return query
+
+_qp = _query_parser()
 
 def parse_query(q):
-    return query.parseString(q)
+    return _qp.parseString(q)
 
 if __name__ == '__main__':
     queries = [
@@ -42,4 +46,4 @@ if __name__ == '__main__':
     ]
     for q in queries:
         print q
-        print query.parseString(q)
+        print parse_query(q)
