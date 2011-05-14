@@ -32,13 +32,27 @@ _triples = []
 def add_triples(*triples):
     _triples.extend(triples)
 
-def _matches(a0, a):
-    return a0.startswith('?') or a0 == a
+def _matches(triple1, triple2):
+    for t1, t2 in zip(triple1, triple2):
+        if t1 != t2 and not t1.startswith('?'):
+            return False
+    return True
 
-def query_by_example(a0, b0, c0):
+def _var_name(name):
+    if name.startswith('?'):
+        return name[1:]
+    return None
+
+def _get_matches(pattern, triple):
+    return dict((_var_name(a), b) for (a,b) in zip(pattern, triple) if _var_name(a))
+
+def match_triples(pattern, existing=None):
+    if existing is None:
+        existing = {}
+    triple = tuple(existing.get(_var_name(a), a) for a in pattern)
     for a, b, c in _triples:
-        if _matches(a0, a) and _matches(b0, b) and _matches(c0, c):
-            yield a, b, c
+        if _matches(triple, (a, b, c)):
+            yield _get_matches(pattern, (a, b, c))
 
 if __name__ == '__main__':
     queries = [
