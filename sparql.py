@@ -10,15 +10,18 @@ triple_value = variable | literal
 triple = Group(triple_value + triple_value + triple_value + Optional(Literal('.').suppress()))
 triples = OneOrMore(triple)
 
-prefix = Group('PREFIX' + literal + literal)
+prefix = Group(Literal('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
 
-prologue = ZeroOrMore(prefix)
+prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
 
-select_query = 'SELECT' + Group(variables) + 'WHERE' + Literal('{').suppress() + \
+select_query = 'SELECT' + Group(variables) + Literal('WHERE').suppress() + Literal('{').suppress() + \
             Group(triples) + \
        Literal('}').suppress()
 
-query = Group(prologue) + Group(select_query)
+query = prologue + Group(select_query).setResultsName('query')
+
+def parse_query(q):
+    return query.parseString(q)
 
 if __name__ == '__main__':
     queries = [
