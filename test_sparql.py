@@ -1,4 +1,4 @@
-from sparql import parse_query
+from sparql import parse_query, add_triples, query_by_example
 import unittest
 
 class TestParsing(unittest.TestCase):
@@ -50,7 +50,14 @@ class TestParsing(unittest.TestCase):
         self.assertEqual('?x', triple[0])
         self.assertEqual('foaf:name', triple[1])
         self.assertEqual('?name', triple[2])
+    
+    def test_query_by_example(self):
+        add_triples(('a', 'name', 'c'), ('b', 'name', 'd'), ('a', 'weight', 'c'))
         
+        self.assertEqual([('a', 'name', 'c')], list(query_by_example('a', 'name', 'c')))
+        self.assertEqual([('a', 'name', 'c')], list(query_by_example('a', 'name', '?value')))
+        self.assertEqual([('a', 'name', 'c'), ('b', 'name', 'd')], list(query_by_example('?id', 'name', '?value')))
+        self.assertEqual([('a', 'name', 'c'), ('b', 'name', 'd'), ('a', 'weight', 'c')], list(query_by_example('?id', '?property', '?value')))
 
 if __name__ == '__main__':
     unittest.main()

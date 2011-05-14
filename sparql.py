@@ -27,6 +27,19 @@ _qp = _query_parser()
 def parse_query(q):
     return _qp.parseString(q)
 
+_triples = []
+
+def add_triples(*triples):
+    _triples.extend(triples)
+
+def _matches(a0, a):
+    return a0.startswith('?') or a0 == a
+
+def query_by_example(a0, b0, c0):
+    for a, b, c in _triples:
+        if _matches(a0, a) and _matches(b0, b) and _matches(c0, c):
+            yield a, b, c
+
 if __name__ == '__main__':
     queries = [
         """SELECT ?title
