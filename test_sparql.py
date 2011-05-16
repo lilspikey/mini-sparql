@@ -1,10 +1,7 @@
-from sparql import parse_query, add_triples, match_triples
+from sparql import parse_query, add_triples, match_triples, query, clear_triples
 import unittest
 
 class TestParsing(unittest.TestCase):
-
-    def setUp(self):
-        self.seq = range(10)
 
     def test_parse_query_select(self):
         p = parse_query("""SELECT ?title
@@ -50,6 +47,11 @@ class TestParsing(unittest.TestCase):
         self.assertEqual('?x', triple[0])
         self.assertEqual('foaf:name', triple[1])
         self.assertEqual('?name', triple[2])
+
+class TestMatchTriples(unittest.TestCase):
+    
+    def setUp(self):
+        clear_triples()
     
     def test_match_triples(self):
         add_triples(('a', 'name', 'c'), ('b', 'name', 'd'), ('a', 'weight', 'c'))
@@ -64,6 +66,53 @@ class TestParsing(unittest.TestCase):
                           dict(id='b', property='name', value='d'),
                           dict(id='a', property='weight', value='c')],
                          list(match_triples(('?id', '?property', '?value'))))
+
+class TestQuery(unittest.TestCase):
+    
+    def setUp(self):
+        clear_triples()
+        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+                    ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
+    
+    def test_query_simple(self):
+        self.assertEqual(
+            [('a', 'name-a'), ('b', 'name-b')],
+            list(query('SELECT ?id ?name WHERE { ?id name ?name }'))
+        )
+    
+    def test_query_join(self):
+        self.assertEqual(
+            [('a', 'name-a', 'weight-a')],
+            list(query('SELECT ?id ?name ?weight WHERE { ?id name ?name . ?id weight ?weight }'))
+        )
+    
+    def test_query_join_unmatchable(self):
+        self.assertEqual(
+            [],
+            list(query('SELECT ?id ?weight WHERE { ?id name ?name . ?name weight ?weight }'))
+        )
+    
+    def test_query_union(self):
+        self.assertEqual(
+            [('a', 'name-a', None), ('b', 'name-b', None), ('a', None, 'weight-a')],
+            list(query('SELECT ?id ?name ?weight WHERE { { ?id name ?name} UNION {?id weight ?weight} }'))
+        )
+    
+    def test_single_optional(self):
+        self.assertEqual(
+            [('a', 'name-a', 'weight-a'), ('b', 'name-b', None)],
+            list(query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }'))
+        )
+    
+    def test_multiple_optional(self):
+        self.assertEqual(
+            [('a', 'name-a', 'weight-a', None), ('b', 'name-b', None, 'size-b')],
+            list(query('''SELECT ?id ?value ?weight ?size
+                        WHERE { ?id name ?value 
+                        OPTIONAL {?id weight ?weight}
+                        OPTIONAL {?id size ?size} }'''))
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

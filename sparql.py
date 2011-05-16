@@ -42,6 +42,10 @@ _triples = []
 def add_triples(*triples):
     _triples.extend(triples)
 
+def clear_triples():
+    global _triples
+    _triples = []
+
 def _matches(triple1, triple2):
     for t1, t2 in zip(triple1, triple2):
         if t1 != t2 and not t1.startswith('?'):
