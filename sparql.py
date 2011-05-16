@@ -20,7 +20,7 @@ def _query_parser():
     not_triples_pattern = optional_graph_pattern | group_or_union_pattern
     
     group_pattern << (Literal('{').suppress() + \
-                      Group(Optional(triples_block) + Optional(not_triples_pattern) + Optional(triples_block)) + \
+                      Group(ZeroOrMore(triples_block) + ZeroOrMore(not_triples_pattern) + ZeroOrMore(triples_block)) + \
                       Literal('}').suppress())
     
     prefix = Group(Keyword('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
@@ -77,6 +77,16 @@ def _union(previous, patterns):
     for p in _group(patterns):
         yield p
 
+def _optional(previous, pattern):
+    for p in previous:
+        matched = False
+        for match in match_triples(pattern, p):
+            yield match
+            matched = True
+        if not matched:
+            yield p
+        
+
 def is_group(pattern):
     if isinstance(pattern, basestring):
         return False
@@ -93,18 +103,23 @@ def print_patterns(patterns):
         else:
             print pattern
 
-def _group(patterns, previous=None, union=False):
+def _group(patterns, previous=None, union=False, optional=False):
     for pattern in patterns:
         if is_group(pattern):
-            previous = _group(pattern, previous, union)
+            previous = _group(pattern, previous, union, optional)
         else:
             if previous is None:
                 previous = match_triples(pattern)
             elif pattern == 'UNION':
                 union = True
+            elif pattern == 'OPTIONAL':
+                optional = True
             elif union:
                 previous = _union(previous, patterns)
                 break
+            elif optional:
+                previous = _optional(previous, pattern)
+                optional = False
             else:
                 previous = _join(previous, pattern)
     return previous
@@ -147,10 +162,18 @@ if __name__ == '__main__':
         print q
         print parse_query(q)
     
-    add_triples(('a', 'name', 'c'), ('b', 'name', 'd'), ('a', 'weight', 'c'),
-                ('c', 'weight', '5'))
+    add_triples(('a', 'name', 'c'),
+                ('b', 'name', 'd'),
+                ('a', 'weight', 'c'),
+                ('c', 'weight', '5'),
+                ('b', 'size', 'one'))
     
     print list(query('SELECT ?id ?value WHERE { ?id name ?value }'))
     print list(query('SELECT ?id ?value WHERE { ?id name ?value . ?id weight ?value }'))
     print list(query('SELECT ?id ?weight WHERE { ?id name ?value . ?value weight ?weight }'))
     print list(query('SELECT ?id ?value WHERE { { ?id name ?value} UNION {?id weight ?value} }'))
+    print list(query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }'))
+    print list(query('''SELECT ?id ?value ?weight ?size
+                    WHERE { ?id name ?value 
+                    OPTIONAL {?id weight ?weight}
+                    OPTIONAL {?id size ?size} }'''))
