@@ -1,23 +1,33 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
-                      Optional, ZeroOrMore
+                      Optional, ZeroOrMore, Keyword, Forward, delimitedList
 
 def _query_parser():
     variable = Combine('?' + Word(alphas))
     variables = OneOrMore(variable)
 
-    literal = Regex(r'[^\s]+')
+    literal = Regex(r'[^\s{}]+')
     triple_value = variable | literal
-
-    triple = Group(triple_value + triple_value + triple_value + Optional(Literal('.').suppress()))
-    triples = OneOrMore(triple)
-
-    prefix = Group(Literal('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
+    
+    triple = Group(triple_value + triple_value + triple_value)
+    triples_block = delimitedList(triple,
+                        delim=Optional(Literal('.').suppress()))  + Optional(Literal('.').suppress())
+    
+    group_pattern = Forward()
+    
+    group_or_union_pattern = group_pattern + Optional(Keyword('UNION') + group_pattern)
+    optional_graph_pattern = Keyword('OPTIONAL') + group_pattern
+    
+    not_triples_pattern = optional_graph_pattern | group_or_union_pattern
+    
+    group_pattern << (Literal('{').suppress() + \
+                      Group(Optional(triples_block) + Optional(not_triples_pattern) + Optional(triples_block)) + \
+                      Literal('}').suppress())
+    
+    prefix = Group(Keyword('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
 
     prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
 
-    select_query = 'SELECT' + Group(variables) + Literal('WHERE').suppress() + Literal('{').suppress() + \
-                Group(triples) + \
-           Literal('}').suppress()
+    select_query = Keyword('SELECT') + Group(variables) + Keyword('WHERE').suppress() + group_pattern
 
     query = prologue + Group(select_query).setResultsName('query')
     return query
@@ -61,18 +71,52 @@ def _join(previous, pattern):
         for match in match_triples(pattern, p):
             yield match
 
+def _union(previous, patterns):
+    for p in previous:
+        yield p
+    for p in _group(patterns):
+        yield p
+
+def is_group(pattern):
+    if isinstance(pattern, basestring):
+        return False
+    if len(pattern) != 3:
+        return True
+    if isinstance(pattern[0], basestring):
+        return False
+    return False
+
+def print_patterns(patterns):
+    for pattern in patterns:
+        if is_group(pattern):
+            print_patterns(pattern)
+        else:
+            print pattern
+
+def _group(patterns, previous=None, union=False):
+    for pattern in patterns:
+        if is_group(pattern):
+            previous = _group(pattern, previous, union)
+        else:
+            if previous is None:
+                previous = match_triples(pattern)
+            elif pattern == 'UNION':
+                union = True
+            elif union:
+                previous = _union(previous, patterns)
+                break
+            else:
+                previous = _join(previous, pattern)
+    return previous
+    
+
 def query(q):
     p = parse_query(q)
     name, variables, patterns = p.query
     
-    p = None
-    for pattern in patterns:
-        if p is None:
-            p = match_triples(pattern)
-        else:
-            p = _join(p, pattern)
+    #print_patterns(patterns)
     
-    for match in p:
+    for match in _group(patterns):
         yield tuple(match.get(_var_name(v)) for v in variables)
 
 if __name__ == '__main__':
@@ -85,12 +129,19 @@ if __name__ == '__main__':
         """PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
         SELECT ?x ?name
         WHERE  { ?x foaf:name ?name }""",
+        
         """PREFIX foaf:    <http://xmlns.com/foaf/0.1/>
         SELECT ?name ?mbox
         WHERE  {
                   ?x foaf:name ?name .
                   ?x foaf:mbox ?mbox .
-               }"""
+               }""",
+        
+        """PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
+           PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
+
+           SELECT ?title
+           WHERE  { { ?book dc10:title  ?title } UNION { ?book dc11:title  ?title } }"""
     ]
     for q in queries:
         print q
@@ -102,3 +153,4 @@ if __name__ == '__main__':
     print list(query('SELECT ?id ?value WHERE { ?id name ?value }'))
     print list(query('SELECT ?id ?value WHERE { ?id name ?value . ?id weight ?value }'))
     print list(query('SELECT ?id ?weight WHERE { ?id name ?value . ?value weight ?weight }'))
+    print list(query('SELECT ?id ?value WHERE { { ?id name ?value} UNION {?id weight ?value} }'))
