@@ -301,6 +301,10 @@ class TestQuery(unittest.TestCase):
             [('a', 'name-a', 'weight-a'), ('b', 'name-b', None)],
             list(query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }'))
         )
+        self.assertEqual(
+            [('b', 'name-b', None)],
+            list(query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} ?id size ?size }'))
+        )
     
     def test_multiple_optional(self):
         self.assertEqual(
@@ -309,6 +313,14 @@ class TestQuery(unittest.TestCase):
                         WHERE { ?id name ?value 
                         OPTIONAL {?id weight ?weight}
                         OPTIONAL {?id size ?size} }'''))
+        )
+
+    def test_group_optional(self):
+        self.assertEqual(
+            [('a', 'name-a', None, None), ('b', 'name-b', None, None)],
+            list(query('''SELECT ?id ?value ?weight ?size
+                        WHERE { ?id name ?value 
+                        OPTIONAL {?id weight ?weight . ?id size ?size} }'''))
         )
 
 
