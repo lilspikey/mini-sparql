@@ -1,5 +1,6 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
-                      Optional, ZeroOrMore, Keyword, Forward, delimitedList
+                      Optional, ZeroOrMore, Keyword, Forward, delimitedList, \
+                      ParseException
 
 def _query_parser():
     variable = Combine('?' + Word(alphas))
@@ -157,8 +158,23 @@ class UnionGroup(object):
     def __repr__(self):
         return 'UnionGroup(%r, %r)' % (self.pattern1, self.pattern2)
 
+def run_prompt():
+    import cmd
+    class Sparql(cmd.Cmd):
+        prompt='sparql> '
+        
+        def default(self, line):
+            try:
+                for row in query(line):
+                    print row
+            except ParseException, p:
+                print p
+    
+    s = Sparql()
+    s.cmdloop()
 
 if __name__ == '__main__':
+    #run_prompt();
     queries = [
         """SELECT ?title
         WHERE
