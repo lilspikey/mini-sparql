@@ -1,4 +1,6 @@
-from sparql import parse_query, add_triples, match_triples, query, clear_triples
+from sparql import parse_query, add_triples, match_triples, query, \
+                   clear_triples, Pattern, PatternGroup, OptionalGroup, \
+                   UnionGroup
 import unittest
 
 class TestParsing(unittest.TestCase):
@@ -66,6 +68,201 @@ class TestMatchTriples(unittest.TestCase):
                           dict(id='b', property='name', value='d'),
                           dict(id='a', property='weight', value='c')],
                          list(match_triples(('?id', '?property', '?value'))))
+
+class TestPattern(unittest.TestCase):
+    
+    def setUp(self):
+        clear_triples()
+        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+                    ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
+        self.p = Pattern('?id', 'name', '?name')
+    
+    def test_match_empty_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a'), dict(id='b', name='name-b')],
+            list(self.p.match({}))
+        )
+
+    def test_match_with_constraining_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a')],
+            list(self.p.match({'id': 'a'}))
+        )
+        self.assertEqual(
+            [dict(id='b', name='name-b')],
+            list(self.p.match({'name': 'name-b'}))
+        )
+    
+    def test_match_with_nonconstraining_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a', bar='two'),
+             dict(id='b', name='name-b', bar='two')],
+            list(self.p.match({'bar': 'two'}))
+        )
+
+class TestOptionalGroup(unittest.TestCase):
+    
+    def setUp(self):
+        clear_triples()
+        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+                    ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
+        self.p = OptionalGroup(Pattern('?id', 'name', '?name'))
+    
+    def test_match_empty_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a'), dict(id='b', name='name-b')],
+            list(self.p.match({}))
+        )
+    
+    def test_match_with_constraining_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a')],
+            list(self.p.match({'id': 'a'}))
+        )
+        self.assertEqual(
+            [dict(id='b', name='name-b')],
+            list(self.p.match({'name': 'name-b'}))
+        )
+        self.assertEqual(
+            [dict(id='c')],
+            list(self.p.match({'id': 'c'}))
+        )
+        self.assertEqual(
+            [dict(id='c', name='name-c')],
+            list(self.p.match({'id': 'c', 'name': 'name-c'}))
+        )
+    
+    def test_match_with_nonconstraining_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a', bar='two'),
+             dict(id='b', name='name-b', bar='two')],
+            list(self.p.match({'bar': 'two'}))
+        )
+
+class TestUnionGroup(unittest.TestCase):
+
+    def setUp(self):
+        clear_triples()
+        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+                    ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
+        self.p = UnionGroup(Pattern('?id', 'name', '?name'),
+                            Pattern('?id', 'weight', '?weight'))
+
+    def test_match_empty_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a'), dict(id='b', name='name-b'),
+             dict(id='a', weight='weight-a')],
+            list(self.p.match({}))
+        )
+    
+    def test_match_with_constraining_solution(self):
+        self.assertEqual(
+            [dict(id='a', name='name-a'), dict(id='a', weight='weight-a')],
+            list(self.p.match({'id': 'a'}))
+        )
+        self.assertEqual(
+            [dict(id='b', name='name-b'), dict(id='a', weight='weight-a', name='name-b')],
+            list(self.p.match({'name': 'name-b'}))
+        )
+        self.assertEqual(
+            [],
+            list(self.p.match({'id': 'c'}))
+        )
+
+class TestPatternGroup(unittest.TestCase):
+
+    def setUp(self):
+        clear_triples()
+        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+                    ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
+    
+    def test_match_empty_solution(self):
+        p = PatternGroup([Pattern('?id', 'name', '?name'),
+                          Pattern('?id', 'weight', '?weight')])
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a')],
+            list(p.match({}))
+        )
+    
+    def test_match_with_constraining_solution(self):
+        p = PatternGroup([Pattern('?id', 'name', '?name'),
+                          Pattern('?id', 'weight', '?weight')])
+        self.assertEqual(
+            [],
+            list(p.match({'id': 'b'}))
+        )
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a')],
+            list(p.match({'id': 'a'}))
+        )
+    
+    def test_with_optional(self):
+        p = PatternGroup([Pattern('?id', 'name', '?name'),
+                          OptionalGroup(Pattern('?id', 'weight', '?weight'))])
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a'),
+             dict(id='b', name='name-b')],
+            list(p.match({}))
+        )
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a')],
+            list(p.match({'id': 'a'}))
+        )
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-b')],
+            list(p.match({'id': 'a', 'weight': 'weight-b'}))
+        )
+
+    def test_with_optional_multiple(self):
+        p = PatternGroup([Pattern('?id', 'name', '?name'),
+                          OptionalGroup(Pattern('?id', 'weight', '?weight')),
+                          OptionalGroup(Pattern('?id', 'size', '?size'))])
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a'),
+             dict(id='b', name='name-b', size='size-b')],
+            list(p.match({}))
+        )
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a')],
+            list(p.match({'id': 'a'}))
+        )
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-b')],
+            list(p.match({'id': 'a', 'weight': 'weight-b'}))
+        )
+        self.assertEqual(
+            [dict(id='b', name='name-b', size='size-b')],
+            list(p.match({'id': 'b'}))
+        )
+
+    def test_with_optional_group(self):
+        p = PatternGroup([Pattern('?id', 'name', '?name'),
+                          OptionalGroup(
+                            PatternGroup([Pattern('?id', 'weight', '?weight'),
+                                          Pattern('?id', 'size', '?size')])
+                          )])
+        self.assertEqual(
+            [dict(id='a', name='name-a'),
+             dict(id='b', name='name-b')],
+            list(p.match({}))
+        )
+        
+        add_triples(('a', 'size', 'size-a'))
+        
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a', size='size-a'),
+             dict(id='b', name='name-b')],
+            list(p.match({}))
+        )
+        self.assertEqual(
+            [dict(id='a', name='name-a', weight='weight-a', size='size-a')],
+            list(p.match({'id': 'a'}))
+        )
+        self.assertEqual(
+            [dict(id='b', name='name-b')],
+            list(p.match({'id': 'b'}))
+        )
+
 
 class TestQuery(unittest.TestCase):
     

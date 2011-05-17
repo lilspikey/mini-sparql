@@ -138,6 +138,58 @@ def query(q):
     for match in _group(patterns):
         yield tuple(match.get(_var_name(v)) for v in variables)
 
+class Pattern(object):
+    def __init__(self, a, b, c):
+        self.pattern = (a, b, c)
+    
+    def match(self, solution=None):
+        for m in match_triples(self.pattern, solution):
+            yield m
+
+class PatternGroup(object):
+    def __init__(self, patterns):
+        self.patterns = patterns
+    
+    def match(self, solution=None):
+        joined = None
+        for pattern in self.patterns:
+            if joined is None:
+                joined = pattern.match(solution)
+            else:
+                joined = self._join(joined, pattern)
+        for m in joined:
+            yield m
+    
+    def _join(self, matches, pattern):
+        for m in matches:
+            for m2 in pattern.match(m):
+                yield m2
+
+class OptionalGroup(object):
+    def __init__(self, pattern):
+        self.pattern = pattern
+    
+    # just return untouched solution if nothing else matched
+    def match(self, solution):
+        matched = False
+        for m in self.pattern.match(solution):
+            yield m
+            matched = True
+        if not matched:
+            yield solution
+
+class UnionGroup(object):
+    def __init__(self, pattern1, pattern2):
+        self.pattern1 = pattern1
+        self.pattern2 = pattern2
+    
+    def match(self, solution):
+        for m in self.pattern1.match(solution):
+            yield m
+        for m in self.pattern2.match(solution):
+            yield m
+
+
 if __name__ == '__main__':
     queries = [
         """SELECT ?title
