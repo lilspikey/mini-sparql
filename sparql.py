@@ -85,65 +85,6 @@ def match_triples(pattern, existing=None):
             matches.update(existing)
             yield matches
 
-def _join(previous, pattern):
-    for p in previous:
-        for match in match_triples(pattern, p):
-            yield match
-
-def _union(previous, patterns):
-    for p in previous:
-        yield p
-    for p in _group(patterns):
-        yield p
-
-def _optional(previous, pattern):
-    for p in previous:
-        matched = False
-        for match in match_triples(pattern, p):
-            yield match
-            matched = True
-        if not matched:
-            yield p
-        
-
-def is_group(pattern):
-    if isinstance(pattern, basestring):
-        return False
-    if len(pattern) != 3:
-        return True
-    if isinstance(pattern[0], basestring):
-        return False
-    return False
-
-def print_patterns(patterns):
-    for pattern in patterns:
-        if is_group(pattern):
-            print_patterns(pattern)
-        else:
-            print pattern
-
-def _group(patterns, previous=None, union=False, optional=False):
-    for pattern in patterns:
-        if is_group(pattern):
-            previous = _group(pattern, previous, union, optional)
-        else:
-            if previous is None:
-                previous = match_triples(pattern)
-            elif pattern == 'UNION':
-                union = True
-            elif pattern == 'OPTIONAL':
-                optional = True
-            elif union:
-                previous = _union(previous, patterns)
-                break
-            elif optional:
-                previous = _optional(previous, pattern)
-                optional = False
-            else:
-                previous = _join(previous, pattern)
-    return previous
-    
-
 def query(q):
     p = parse_query(q)
     name, variables, patterns = p.query
