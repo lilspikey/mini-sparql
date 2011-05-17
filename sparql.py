@@ -139,6 +139,9 @@ class OptionalGroup(object):
             matched = True
         if not matched:
             yield solution
+    
+    def __repr__(self):
+        return 'OptionalGroup(%r)' % self.pattern
 
 class UnionGroup(object):
     def __init__(self, pattern1, pattern2):
@@ -150,6 +153,9 @@ class UnionGroup(object):
             yield m
         for m in self.pattern2.match(solution):
             yield m
+    
+    def __repr__(self):
+        return 'UnionGroup(%r, %r)' % (self.pattern1, self.pattern2)
 
 
 if __name__ == '__main__':
