@@ -8,19 +8,34 @@ def _query_parser():
     literal = Regex(r'[^\s{}]+')
     triple_value = variable | literal
     
-    triple = Group(triple_value + triple_value + triple_value)
+    def group_if_multiple(s, loc, toks):
+        if len(toks) > 1:
+            return PatternGroup(toks)
+        return toks
+    
+    triple = (triple_value + triple_value + triple_value)\
+                .setParseAction(lambda s, loc, toks: Pattern(*toks))
     triples_block = delimitedList(triple,
-                        delim=Optional(Literal('.').suppress()))  + Optional(Literal('.').suppress())
+                        delim=Optional(Literal('.').suppress())) \
+                        .setParseAction(group_if_multiple) \
+                        + Optional(Literal('.').suppress())
     
-    group_pattern = Forward()
+    group_pattern = Forward().setParseAction(group_if_multiple)
     
-    group_or_union_pattern = group_pattern + Optional(Keyword('UNION') + group_pattern)
-    optional_graph_pattern = Keyword('OPTIONAL') + group_pattern
+    def possible_union_group(s, loc, toks):
+        if len(toks) == 3:
+            return UnionGroup(toks[0], toks[-1])
+        return toks
+    
+    group_or_union_pattern = (group_pattern + Optional(Keyword('UNION') + group_pattern)) \
+                                .setParseAction(possible_union_group)
+    optional_graph_pattern = (Keyword('OPTIONAL') + group_pattern) \
+                                .setParseAction(lambda s, loc, toks: OptionalGroup(toks[1]))
     
     not_triples_pattern = optional_graph_pattern | group_or_union_pattern
     
     group_pattern << (Literal('{').suppress() + \
-                      Group(ZeroOrMore(triples_block) + ZeroOrMore(not_triples_pattern) + ZeroOrMore(triples_block)) + \
+                      (Optional(triples_block) + ZeroOrMore(not_triples_pattern) + Optional(triples_block)) + \
                       Literal('}').suppress())
     
     prefix = Group(Keyword('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
@@ -133,10 +148,9 @@ def query(q):
     p = parse_query(q)
     name, variables, patterns = p.query
     
-    #print_patterns(patterns)
-    
-    for match in _group(patterns):
+    for match in patterns.match({}):
         yield tuple(match.get(_var_name(v)) for v in variables)
+
 
 class Pattern(object):
     def __init__(self, a, b, c):
@@ -145,6 +159,9 @@ class Pattern(object):
     def match(self, solution=None):
         for m in match_triples(self.pattern, solution):
             yield m
+    
+    def __repr__(self):
+        return 'Pattern(%s, %s, %s)' % self.pattern
 
 class PatternGroup(object):
     def __init__(self, patterns):
@@ -164,6 +181,10 @@ class PatternGroup(object):
         for m in matches:
             for m2 in pattern.match(m):
                 yield m2
+    
+    def __repr__(self):
+        return 'PatternGroup(%r)' % self.patterns
+
 
 class OptionalGroup(object):
     def __init__(self, pattern):

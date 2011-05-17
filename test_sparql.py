@@ -13,12 +13,13 @@ class TestParsing(unittest.TestCase):
         }""")
         
         self.assertTrue(hasattr(p, 'query'))
-        name, variables, triples = p.query
+        name, variables, pattern = p.query
+
         self.assertEqual('SELECT', name)
         self.assertEqual(1, len(variables))
         self.assertEquals('?title', variables[0])
-        self.assertEquals(1, len(triples))
-        triple = triples[0]
+        self.assertTrue(isinstance(pattern, Pattern))
+        triple = pattern.pattern
         self.assertEqual(3, len(triple))
         self.assertEqual('<http://example.org/book/book1>', triple[0])
         self.assertEqual('<http://purl.org/dc/elements/1.1/title>', triple[1])
@@ -39,13 +40,13 @@ class TestParsing(unittest.TestCase):
         self.assertTrue(hasattr(prefix, 'value'))
         self.assertEqual('<http://xmlns.com/foaf/0.1/>', prefix.value)
         
-        name, variables, triples = p.query
+        name, variables, pattern = p.query
         self.assertEqual(2, len(variables))
         self.assertEqual('?x', variables[0])
         self.assertEqual('?name', variables[1])
         
-        self.assertEqual(1, len(triples))
-        triple = triples[0]
+        self.assertTrue(isinstance(pattern, Pattern))
+        triple = pattern.pattern
         self.assertEqual('?x', triple[0])
         self.assertEqual('foaf:name', triple[1])
         self.assertEqual('?name', triple[2])
