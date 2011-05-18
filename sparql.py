@@ -43,7 +43,7 @@ def _query_parser():
 
     prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
 
-    select_query = Keyword('SELECT') + Group(variables) + Keyword('WHERE').suppress() + group_pattern
+    select_query = Keyword('SELECT') + Group(variables | Keyword('*')) + Keyword('WHERE').suppress() + group_pattern
 
     query = prologue + Group(select_query).setResultsName('query')
     return query
@@ -90,13 +90,38 @@ def query(q):
     p = parse_query(q)
     name, variables, patterns = p.query
     
-    for match in patterns.match({}):
-        yield tuple(match.get(_var_name(v)) for v in variables)
+    return SelectQuery(name, variables, patterns)
 
+def _uniq(l):
+    seen = set()
+    u = []
+    for i in l:
+        if i not in seen:
+            u.append(i)
+            seen.add(i)
+    return u
+
+class SelectQuery(object):
+    def __init__(self, name, variables, patterns):
+        self.name = name
+        if len(variables) == 1 and variables[0] == '*':
+            variables = patterns.variables
+        self.variables = tuple(_uniq(variables))
+        self.patterns = patterns
+    
+    def __iter__(self):
+        variables = self.variables
+        
+        for match in self.patterns.match({}):
+            yield tuple(match.get(_var_name(v)) for v in variables)
 
 class Pattern(object):
     def __init__(self, a, b, c):
         self.pattern = (a, b, c)
+    
+    @property
+    def variables(self):
+        return [v for v in self.pattern if v.startswith('?')]
     
     def match(self, solution=None):
         for m in match_triples(self.pattern, solution):
@@ -108,6 +133,13 @@ class Pattern(object):
 class PatternGroup(object):
     def __init__(self, patterns):
         self.patterns = patterns
+    
+    @property
+    def variables(self):
+        variables = []
+        for p in self.patterns:
+            variables.extend(p.variables)
+        return variables
     
     def match(self, solution=None):
         joined = None
@@ -132,6 +164,10 @@ class OptionalGroup(object):
     def __init__(self, pattern):
         self.pattern = pattern
     
+    @property
+    def variables(self):
+        return self.pattern.variables
+    
     # just return untouched solution if nothing else matched
     def match(self, solution):
         matched = False
@@ -149,6 +185,13 @@ class UnionGroup(object):
         self.pattern1 = pattern1
         self.pattern2 = pattern2
     
+    @property
+    def variables(self):
+        variables = []
+        variables.extend(self.pattern1.variables)
+        variables.extend(self.pattern2.variables)
+        return variables
+    
     def match(self, solution):
         for m in self.pattern1.match(solution):
             yield m
@@ -165,7 +208,9 @@ def run_prompt():
         
         def default(self, line):
             try:
-                for row in query(line):
+                q = query(line)
+                print q.variables
+                for row in q:
                     print row
             except ParseException, p:
                 print p

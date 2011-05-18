@@ -322,6 +322,15 @@ class TestQuery(unittest.TestCase):
                         WHERE { ?id name ?value 
                         OPTIONAL {?id weight ?weight . ?id size ?size} }'''))
         )
+    
+    def test_star_has_right_column_order(self):
+        q = query('SELECT * WHERE { ?id name ?name }')
+        self.assertEqual(('?id', '?name'), q.variables)
+        q = query('SELECT * WHERE { { ?id name ?name} UNION {?id weight ?weight} }')
+        self.assertEqual(('?id', '?name', '?weight'), q.variables)
+        q = query('SELECT * WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }')
+        self.assertEqual(('?id', '?value', '?weight'), q.variables)
+        
 
 
 if __name__ == '__main__':
