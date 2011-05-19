@@ -2,6 +2,8 @@ from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       Optional, ZeroOrMore, Keyword, Forward, delimitedList, \
                       ParseException
 
+import sys
+
 def _query_parser():
     variable = Combine('?' + Word(alphas))
     variables = OneOrMore(variable)
@@ -201,6 +203,14 @@ class UnionGroup(object):
     def __repr__(self):
         return 'UnionGroup(%r, %r)' % (self.pattern1, self.pattern2)
 
+def import_file(filename):
+    value = Regex(r'[^\s{}]+')
+    triple = Group(value + value + value + Literal('.').suppress())
+    
+    turtle = ZeroOrMore(triple)
+    
+    add_triples(*turtle.parseFile(filename, parseAll=True))
+
 def run_prompt():
     import cmd
     class Sparql(cmd.Cmd):
@@ -219,46 +229,6 @@ def run_prompt():
     s.cmdloop()
 
 if __name__ == '__main__':
-    #run_prompt();
-    queries = [
-        """SELECT ?title
-        WHERE
-        {
-          <http://example.org/book/book1> <http://purl.org/dc/elements/1.1/title> ?title .
-        }""",
-        """PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
-        SELECT ?x ?name
-        WHERE  { ?x foaf:name ?name }""",
-        
-        """PREFIX foaf:    <http://xmlns.com/foaf/0.1/>
-        SELECT ?name ?mbox
-        WHERE  {
-                  ?x foaf:name ?name .
-                  ?x foaf:mbox ?mbox .
-               }""",
-        
-        """PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
-           PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
-
-           SELECT ?title
-           WHERE  { { ?book dc10:title  ?title } UNION { ?book dc11:title  ?title } }"""
-    ]
-    for q in queries:
-        print q
-        print parse_query(q)
-    
-    add_triples(('a', 'name', 'c'),
-                ('b', 'name', 'd'),
-                ('a', 'weight', 'c'),
-                ('c', 'weight', '5'),
-                ('b', 'size', 'one'))
-    
-    print list(query('SELECT ?id ?value WHERE { ?id name ?value }'))
-    print list(query('SELECT ?id ?value WHERE { ?id name ?value . ?id weight ?value }'))
-    print list(query('SELECT ?id ?weight WHERE { ?id name ?value . ?value weight ?weight }'))
-    print list(query('SELECT ?id ?value WHERE { { ?id name ?value} UNION {?id weight ?value} }'))
-    print list(query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }'))
-    print list(query('''SELECT ?id ?value ?weight ?size
-                    WHERE { ?id name ?value 
-                    OPTIONAL {?id weight ?weight}
-                    OPTIONAL {?id size ?size} }'''))
+    if len(sys.argv) > 1:
+        import_file(sys.argv[1])
+    run_prompt()
