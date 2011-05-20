@@ -1,15 +1,23 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       Optional, ZeroOrMore, Keyword, Forward, delimitedList, \
-                      ParseException
+                      ParseException, QuotedString
 
 import sys
+
+_number = Regex(r'[-+]?\d+(\.\d*)?([eE]\d+)?').setParseAction(lambda s, loc, toks: float(toks[0]))
+_string = QuotedString('"""', escChar='\\', multiline=True) \
+        | QuotedString('\'\'\'', escChar='\\', multiline=True) \
+        | QuotedString('"', escChar='\\') | QuotedString('\'', escChar='\\')
+_iri = QuotedString('<', unquoteResults=False, endQuoteChar='>') | Combine(Word(alphas) + ':' + Word(alphas))
+_boolean = (Keyword('true') | Keyword('false')).setParseAction(lambda s, loc, toks: toks[0] == 'true')
+
+_literal = _number | _string | _iri | _boolean | Word(alphas)
 
 def _query_parser():
     variable = Combine('?' + Word(alphas))
     variables = OneOrMore(variable)
 
-    literal = Regex(r'[^\s{}]+')
-    triple_value = variable | literal
+    triple_value = variable | _literal
     
     def group_if_multiple(s, loc, toks):
         if len(toks) > 1:
@@ -41,7 +49,7 @@ def _query_parser():
                       (Optional(triples_block) + ZeroOrMore(not_triples_pattern) + Optional(triples_block)) + \
                       Literal('}').suppress())
     
-    prefix = Group(Keyword('PREFIX').suppress() + literal.setResultsName('name') + literal.setResultsName('value'))
+    prefix = Group(Keyword('PREFIX').suppress() + Combine(Word(alphas) + ':').setResultsName('name') + QuotedString('<', unquoteResults=False, endQuoteChar='>').setResultsName('value'))
 
     prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
 
@@ -204,8 +212,7 @@ class UnionGroup(object):
         return 'UnionGroup(%r, %r)' % (self.pattern1, self.pattern2)
 
 def import_file(filename):
-    value = Regex(r'[^\s{}]+')
-    triple = Group(value + value + value + Literal('.').suppress())
+    triple = Group(_literal + _literal + _literal + Literal('.').suppress())
     
     turtle = ZeroOrMore(triple)
     
