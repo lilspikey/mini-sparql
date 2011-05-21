@@ -3,6 +3,7 @@ from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       ParseException, QuotedString
 
 import sys
+import operator
 
 _number = Regex(r'[-+]?\d+(\.\d*)?([eE]\d+)?').setParseAction(lambda s, loc, toks: float(toks[0]))
 _string = QuotedString('"""', escChar='\\', multiline=True) \
@@ -12,6 +13,21 @@ _iri = QuotedString('<', unquoteResults=False, endQuoteChar='>') | Combine(Word(
 _boolean = (Keyword('true') | Keyword('false')).setParseAction(lambda s, loc, toks: toks[0] == 'true')
 
 _literal = _number | _string | _iri | _boolean | Word(alphas)
+
+def _create_binary_operator():
+    existing = None
+    for symbol, op in (('<=', operator.le), ('>=', operator.ge),
+                       ('<', operator.lt), ('>', operator.gt),
+                       ('=', operator.eq), ('!=', operator.ne)):
+        bop = _operator_keyword(symbol, op)
+        if not existing:
+            existing = bop
+        else:
+            existing = existing | bop
+    return existing
+
+def _operator_keyword(symbol, op):
+    return Keyword(symbol).setParseAction(lambda s, loc, toks: op)
 
 def _query_parser():
     variable = Combine('?' + Word(alphas))
@@ -40,10 +56,20 @@ def _query_parser():
     
     group_or_union_pattern = (group_pattern + Optional(Keyword('UNION') + group_pattern)) \
                                 .setParseAction(possible_union_group)
-    optional_graph_pattern = (Keyword('OPTIONAL') + group_pattern) \
-                                .setParseAction(lambda s, loc, toks: OptionalGroup(toks[1]))
+    optional_graph_pattern = (Keyword('OPTIONAL').suppress() + group_pattern) \
+                                .setParseAction(lambda s, loc, toks: OptionalGroup(toks[0]))
     
-    not_triples_pattern = optional_graph_pattern | group_or_union_pattern
+    binary_operator = _create_binary_operator()
+    
+    binary_expression = (triple_value + binary_operator + triple_value) \
+                            .setParseAction(lambda s, loc, toks: BinaryExpression(*toks))
+    
+    filter_expression = Literal('(').suppress() + binary_expression + Literal(')').suppress()
+    
+    filter_pattern = (Keyword('FILTER').suppress() + filter_expression) \
+                        .setParseAction(lambda s, loc, toks: Filter(toks[0]))
+    
+    not_triples_pattern = optional_graph_pattern | group_or_union_pattern | filter_pattern
     
     group_pattern << (Literal('{').suppress() + \
                       (Optional(triples_block) + ZeroOrMore(not_triples_pattern) + Optional(triples_block)) + \
@@ -79,7 +105,7 @@ def _matches(triple1, triple2):
     return True
 
 def _var_name(name):
-    if name.startswith('?'):
+    if isinstance(name, basestring) and name.startswith('?'):
         return name[1:]
     return None
 
@@ -210,6 +236,47 @@ class UnionGroup(object):
     
     def __repr__(self):
         return 'UnionGroup(%r, %r)' % (self.pattern1, self.pattern2)
+
+
+class Filter(object):
+    def __init__(self, expression):
+        self.expression = expression
+
+    @property
+    def variables(self):
+        return []
+
+    def match(self, solution):
+        try:
+            if self.expression.matches(solution):
+                yield solution
+        except TypeError:
+            pass
+
+    def __repr__(self):
+        return 'Filter(%r)' % (self.expression)
+
+
+class BinaryExpression(object):
+    def __init__(self, lhs, operator, rhs):
+        self.lhs = lhs
+        self.operator = operator
+        self.rhs = rhs
+    
+    def _resolve(self, solution, a):
+        name = _var_name(a)
+        if name is None:
+            return a
+        return solution.get(name)
+    
+    def matches(self, solution):
+        a = self._resolve(solution, self.lhs)
+        b = self._resolve(solution, self.rhs)
+        return self.operator(a, b)
+    
+    def __repr__(self):
+        return u'%s %s %s' % (self.lhs, self.operator.__name__, self.rhs)
+
 
 def import_file(filename):
     triple = Group(_literal + _literal + _literal + Literal('.').suppress())

@@ -51,6 +51,7 @@ class TestParsing(unittest.TestCase):
         self.assertEqual('foaf:name', triple[1])
         self.assertEqual('?name', triple[2])
 
+
 class TestMatchTriples(unittest.TestCase):
     
     def setUp(self):
@@ -270,7 +271,8 @@ class TestQuery(unittest.TestCase):
     def setUp(self):
         clear_triples()
         add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
-                    ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
+                    ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'),
+                    ('a', 'height', 100))
     
     def test_query_simple(self):
         self.assertEqual(
@@ -330,7 +332,56 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(('?id', '?name', '?weight'), q.variables)
         q = query('SELECT * WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }')
         self.assertEqual(('?id', '?value', '?weight'), q.variables)
-        
+    
+    def test_filter(self):
+        self.assertEqual(
+            [(100,)],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height > 99) }'))
+        )
+        self.assertEqual(
+            [],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height > 100) }'))
+        )
+        self.assertEqual(
+            [(100,)],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height >= 100) }'))
+        )
+        self.assertEqual(
+            [],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height >= 101) }'))
+        )
+        self.assertEqual(
+            [(100,)],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height < 101) }'))
+        )
+        self.assertEqual(
+            [],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height < 100) }'))
+        )
+        self.assertEqual(
+            [(100,)],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height <= 100) }'))
+        )
+        self.assertEqual(
+            [],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height <= 99) }'))
+        )
+        self.assertEqual(
+            [],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height != 100) }'))
+        )
+        self.assertEqual(
+            [(100,)],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height != 101) }'))
+        )
+        self.assertEqual(
+            [],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 101) }'))
+        )
+        self.assertEqual(
+            [(100,)],
+            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 100) }'))
+        )
 
 
 if __name__ == '__main__':
