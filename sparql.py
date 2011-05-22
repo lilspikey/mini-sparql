@@ -4,8 +4,11 @@ from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
 
 import sys
 import operator
+from itertools import islice
 
-_number = Regex(r'[-+]?\d+(\.\d*)?([eE]\d+)?').setParseAction(lambda s, loc, toks: float(toks[0]))
+_float = Regex(r'[-+]?\d+\.\d*([eE]\d+)?').setParseAction(lambda s, loc, toks: float(toks[0]))
+_integer = Regex(r'[-+]?\d+').setParseAction(lambda s, loc, toks: int(toks[0]))
+_number = _float | _integer
 _string = QuotedString('"""', escChar='\\', multiline=True) \
         | QuotedString('\'\'\'', escChar='\\', multiline=True) \
         | QuotedString('"', escChar='\\') | QuotedString('\'', escChar='\\')
@@ -91,10 +94,15 @@ def _query_parser(store):
                     lambda s, loc, toks: OrderBy(toks[-1], len(toks) == 1 or toks[0].upper() != 'DESC')
                )
     
-    select_query = Keyword('SELECT') + \
+    limit = (CaselessKeyword('LIMIT').suppress() + Regex(r'\d+').setParseAction(lambda s, loc, toks: Limit(toks[0])))
+    offset = (CaselessKeyword('OFFSET').suppress() + Regex(r'\d+').setParseAction(lambda s, loc, toks: Offset(toks[0])))
+    
+    select_query = CaselessKeyword('SELECT') + \
                    Group(variables | Keyword('*')) + \
                    CaselessKeyword('WHERE').suppress() + group_pattern + \
-                   Optional(order_by)
+                   Optional(order_by) + \
+                   ((Optional(limit) + Optional(offset)) \
+                  | (Optional(offset) + Optional(limit)))
 
     query = prologue + Group(select_query).setResultsName('query')
     return query
@@ -110,20 +118,27 @@ def _uniq(l):
     return u
 
 class SelectQuery(object):
-    def __init__(self, name, variables, patterns, order_by):
+    def __init__(self, name, variables, patterns, order_by, limit, offset):
         self.name = name
         if len(variables) == 1 and variables[0] == '*':
             variables = patterns.variables
         self.variables = tuple(_uniq(variables))
         self.patterns = patterns
         self.order_by = order_by
+        self.limit = limit
+        self.offset = offset or 0
     
     def __iter__(self):
         variables = self.variables
-        
         matches = self.patterns.match({})
         if self.order_by is not None:
             matches = self.order_by.order(matches)
+        
+        stop = None
+        if self.limit is not None:
+            stop = self.offset + self.limit
+        
+        matches = islice(matches, self.offset, stop)
         
         for match in matches:
             yield tuple(match.get(_var_name(v)) for v in variables)
@@ -268,6 +283,13 @@ class OrderBy(object):
     def order(self, matches):
         return sorted(matches, key=self._key, reverse=(not self.asc))
 
+class Limit(object):
+    def __init__(self, limit):
+        self.limit = int(limit)
+
+class Offset(object):
+    def __init__(self, offset):
+        self.offset = int(offset)
 
 class Index(object):
     
@@ -352,13 +374,24 @@ class TripleStore(object):
 
     def query(self, q):
         p = self.parse_query(q)
-        if len(p.query) == 3:
-            name, variables, patterns = p.query
-            order_by = None
-        else:
-            name, variables, patterns, order_by = p.query
-
-        return SelectQuery(name, variables, patterns, order_by)
+        q = p.query
+        name = q[0]
+        variables = q[1]
+        patterns = q[2]
+        
+        order_by = None
+        limit = None
+        offset = None
+        
+        for modifier in q[3:]:
+            if isinstance(modifier, OrderBy):
+                order_by = modifier
+            elif isinstance(modifier, Limit):
+                limit = modifier.limit
+            elif isinstance(modifier, Offset):
+                offset = modifier.offset
+        
+        return SelectQuery(name, variables, patterns, order_by, limit, offset)
     
     def import_file(self, filename):
         triple = Group(_literal + _literal + _literal + Literal('.').suppress())

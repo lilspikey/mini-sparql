@@ -400,6 +400,19 @@ class TestQuery(unittest.TestCase):
             [('b', 'name-b'), ('a', 'name-a')],
             list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name } ORDER BY DESC(?name)'))
         )
+        
+    def test_limit(self):
+        self.assertEqual(
+            [('a', 'name-a')],
+            list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name } ORDER BY ?name LIMIT 1'))
+        )
+    
+    def test_order_by(self):
+        self.assertEqual(
+            [('b', 'name-b')],
+            list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name } ORDER BY ?name OFFSET 1'))
+        )
+
 
 
 class TestIndex(unittest.TestCase):
