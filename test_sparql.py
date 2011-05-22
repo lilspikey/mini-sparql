@@ -1,12 +1,14 @@
-from sparql import parse_query, add_triples, match_triples, query, \
-                   clear_triples, Pattern, PatternGroup, OptionalGroup, \
+from sparql import TripleStore, Pattern, PatternGroup, OptionalGroup, \
                    UnionGroup, Index
 import unittest
 
 class TestParsing(unittest.TestCase):
-
+    
+    def setUp(self):
+        self.store = TripleStore()
+    
     def test_parse_query_select(self):
-        p = parse_query("""SELECT ?title
+        p = self.store.parse_query("""SELECT ?title
         WHERE
         {
           <http://example.org/book/book1> <http://purl.org/dc/elements/1.1/title> ?title .
@@ -26,7 +28,7 @@ class TestParsing(unittest.TestCase):
         self.assertEqual('?title', triple[2])
     
     def test_parse_query_select_with_prefix(self):
-        p = parse_query("""PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+        p = self.store.parse_query("""PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
         SELECT ?x ?name
         WHERE  { ?x foaf:name ?name }""")
         
@@ -55,29 +57,31 @@ class TestParsing(unittest.TestCase):
 class TestMatchTriples(unittest.TestCase):
     
     def setUp(self):
-        clear_triples()
+        self.store = TripleStore()
     
     def test_match_triples(self):
-        add_triples(('a', 'name', 'c'), ('b', 'name', 'd'), ('a', 'weight', 'c'))
+        self.store.add_triples(('a', 'name', 'c'),
+                               ('b', 'name', 'd'),
+                               ('a', 'weight', 'c'))
         
-        self.assertEqual([{}], list(match_triples(('a', 'name', 'c'))))
+        self.assertEqual([{}], list(self.store.match_triples(('a', 'name', 'c'))))
         self.assertEqual([dict(value='c')],
-                         list(match_triples(('a', 'name', '?value'))))
+                         list(self.store.match_triples(('a', 'name', '?value'))))
         self.assertEqual([dict(id='a', value='c'),
                           dict(id='b', value='d')],
-                         list(match_triples(('?id', 'name', '?value'))))
+                         list(self.store.match_triples(('?id', 'name', '?value'))))
         self.assertEqual([dict(id='a', property='name', value='c'),
                           dict(id='b', property='name', value='d'),
                           dict(id='a', property='weight', value='c')],
-                         list(match_triples(('?id', '?property', '?value'))))
+                         list(self.store.match_triples(('?id', '?property', '?value'))))
 
 class TestPattern(unittest.TestCase):
     
     def setUp(self):
-        clear_triples()
-        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+        self.store = TripleStore()
+        self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
-        self.p = Pattern('?id', 'name', '?name')
+        self.p = Pattern(self.store, '?id', 'name', '?name')
     
     def test_match_empty_solution(self):
         self.assertEqual(
@@ -105,10 +109,10 @@ class TestPattern(unittest.TestCase):
 class TestOptionalGroup(unittest.TestCase):
     
     def setUp(self):
-        clear_triples()
-        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+        self.store = TripleStore()
+        self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
-        self.p = OptionalGroup(Pattern('?id', 'name', '?name'))
+        self.p = OptionalGroup(Pattern(self.store, '?id', 'name', '?name'))
     
     def test_match_empty_solution(self):
         self.assertEqual(
@@ -144,11 +148,11 @@ class TestOptionalGroup(unittest.TestCase):
 class TestUnionGroup(unittest.TestCase):
 
     def setUp(self):
-        clear_triples()
-        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+        self.store = TripleStore()
+        self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
-        self.p = UnionGroup(Pattern('?id', 'name', '?name'),
-                            Pattern('?id', 'weight', '?weight'))
+        self.p = UnionGroup(Pattern(self.store, '?id', 'name', '?name'),
+                            Pattern(self.store, '?id', 'weight', '?weight'))
 
     def test_match_empty_solution(self):
         self.assertEqual(
@@ -174,21 +178,21 @@ class TestUnionGroup(unittest.TestCase):
 class TestPatternGroup(unittest.TestCase):
 
     def setUp(self):
-        clear_triples()
-        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+        self.store = TripleStore()
+        self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
     
     def test_match_empty_solution(self):
-        p = PatternGroup([Pattern('?id', 'name', '?name'),
-                          Pattern('?id', 'weight', '?weight')])
+        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
+                          Pattern(self.store, '?id', 'weight', '?weight')])
         self.assertEqual(
             [dict(id='a', name='name-a', weight='weight-a')],
             list(p.match({}))
         )
     
     def test_match_with_constraining_solution(self):
-        p = PatternGroup([Pattern('?id', 'name', '?name'),
-                          Pattern('?id', 'weight', '?weight')])
+        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
+                          Pattern(self.store, '?id', 'weight', '?weight')])
         self.assertEqual(
             [],
             list(p.match({'id': 'b'}))
@@ -199,8 +203,8 @@ class TestPatternGroup(unittest.TestCase):
         )
     
     def test_with_optional(self):
-        p = PatternGroup([Pattern('?id', 'name', '?name'),
-                          OptionalGroup(Pattern('?id', 'weight', '?weight'))])
+        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
+                          OptionalGroup(Pattern(self.store, '?id', 'weight', '?weight'))])
         self.assertEqual(
             [dict(id='a', name='name-a', weight='weight-a'),
              dict(id='b', name='name-b')],
@@ -216,9 +220,9 @@ class TestPatternGroup(unittest.TestCase):
         )
 
     def test_with_optional_multiple(self):
-        p = PatternGroup([Pattern('?id', 'name', '?name'),
-                          OptionalGroup(Pattern('?id', 'weight', '?weight')),
-                          OptionalGroup(Pattern('?id', 'size', '?size'))])
+        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
+                          OptionalGroup(Pattern(self.store, '?id', 'weight', '?weight')),
+                          OptionalGroup(Pattern(self.store, '?id', 'size', '?size'))])
         self.assertEqual(
             [dict(id='a', name='name-a', weight='weight-a'),
              dict(id='b', name='name-b', size='size-b')],
@@ -238,10 +242,10 @@ class TestPatternGroup(unittest.TestCase):
         )
 
     def test_with_optional_group(self):
-        p = PatternGroup([Pattern('?id', 'name', '?name'),
+        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
                           OptionalGroup(
-                            PatternGroup([Pattern('?id', 'weight', '?weight'),
-                                          Pattern('?id', 'size', '?size')])
+                            PatternGroup([Pattern(self.store, '?id', 'weight', '?weight'),
+                                          Pattern(self.store, '?id', 'size', '?size')])
                           )])
         self.assertEqual(
             [dict(id='a', name='name-a'),
@@ -249,7 +253,7 @@ class TestPatternGroup(unittest.TestCase):
             list(p.match({}))
         )
         
-        add_triples(('a', 'size', 'size-a'))
+        self.store.add_triples(('a', 'size', 'size-a'))
         
         self.assertEqual(
             [dict(id='a', name='name-a', weight='weight-a', size='size-a'),
@@ -269,49 +273,49 @@ class TestPatternGroup(unittest.TestCase):
 class TestQuery(unittest.TestCase):
     
     def setUp(self):
-        clear_triples()
-        add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
+        self.store = TripleStore()
+        self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'),
                     ('a', 'height', 100))
     
     def test_query_simple(self):
         self.assertEqual(
             [('a', 'name-a'), ('b', 'name-b')],
-            list(query('SELECT ?id ?name WHERE { ?id name ?name }'))
+            list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name }'))
         )
     
     def test_query_join(self):
         self.assertEqual(
             [('a', 'name-a', 'weight-a')],
-            list(query('SELECT ?id ?name ?weight WHERE { ?id name ?name . ?id weight ?weight }'))
+            list(self.store.query('SELECT ?id ?name ?weight WHERE { ?id name ?name . ?id weight ?weight }'))
         )
     
     def test_query_join_unmatchable(self):
         self.assertEqual(
             [],
-            list(query('SELECT ?id ?weight WHERE { ?id name ?name . ?name weight ?weight }'))
+            list(self.store.query('SELECT ?id ?weight WHERE { ?id name ?name . ?name weight ?weight }'))
         )
     
     def test_query_union(self):
         self.assertEqual(
             [('a', 'name-a', None), ('b', 'name-b', None), ('a', None, 'weight-a')],
-            list(query('SELECT ?id ?name ?weight WHERE { { ?id name ?name} UNION {?id weight ?weight} }'))
+            list(self.store.query('SELECT ?id ?name ?weight WHERE { { ?id name ?name} UNION {?id weight ?weight} }'))
         )
     
     def test_single_optional(self):
         self.assertEqual(
             [('a', 'name-a', 'weight-a'), ('b', 'name-b', None)],
-            list(query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }'))
+            list(self.store.query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }'))
         )
         self.assertEqual(
             [('b', 'name-b', None)],
-            list(query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} ?id size ?size }'))
+            list(self.store.query('SELECT ?id ?value ?weight WHERE { ?id name ?value OPTIONAL {?id weight ?weight} ?id size ?size }'))
         )
     
     def test_multiple_optional(self):
         self.assertEqual(
             [('a', 'name-a', 'weight-a', None), ('b', 'name-b', None, 'size-b')],
-            list(query('''SELECT ?id ?value ?weight ?size
+            list(self.store.query('''SELECT ?id ?value ?weight ?size
                         WHERE { ?id name ?value 
                         OPTIONAL {?id weight ?weight}
                         OPTIONAL {?id size ?size} }'''))
@@ -320,67 +324,67 @@ class TestQuery(unittest.TestCase):
     def test_group_optional(self):
         self.assertEqual(
             [('a', 'name-a', None, None), ('b', 'name-b', None, None)],
-            list(query('''SELECT ?id ?value ?weight ?size
+            list(self.store.query('''SELECT ?id ?value ?weight ?size
                         WHERE { ?id name ?value 
                         OPTIONAL {?id weight ?weight . ?id size ?size} }'''))
         )
     
     def test_star_has_right_column_order(self):
-        q = query('SELECT * WHERE { ?id name ?name }')
+        q = self.store.query('SELECT * WHERE { ?id name ?name }')
         self.assertEqual(('?id', '?name'), q.variables)
-        q = query('SELECT * WHERE { { ?id name ?name} UNION {?id weight ?weight} }')
+        q = self.store.query('SELECT * WHERE { { ?id name ?name} UNION {?id weight ?weight} }')
         self.assertEqual(('?id', '?name', '?weight'), q.variables)
-        q = query('SELECT * WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }')
+        q = self.store.query('SELECT * WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }')
         self.assertEqual(('?id', '?value', '?weight'), q.variables)
     
     def test_filter(self):
         self.assertEqual(
             [(100,)],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height > 99) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height > 99) }'))
         )
         self.assertEqual(
             [],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height > 100) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height > 100) }'))
         )
         self.assertEqual(
             [(100,)],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height >= 100) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height >= 100) }'))
         )
         self.assertEqual(
             [],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height >= 101) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height >= 101) }'))
         )
         self.assertEqual(
             [(100,)],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height < 101) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height < 101) }'))
         )
         self.assertEqual(
             [],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height < 100) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height < 100) }'))
         )
         self.assertEqual(
             [(100,)],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height <= 100) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height <= 100) }'))
         )
         self.assertEqual(
             [],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height <= 99) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height <= 99) }'))
         )
         self.assertEqual(
             [],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height != 100) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height != 100) }'))
         )
         self.assertEqual(
             [(100,)],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height != 101) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height != 101) }'))
         )
         self.assertEqual(
             [],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 101) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 101) }'))
         )
         self.assertEqual(
             [(100,)],
-            list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 100) }'))
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 100) }'))
         )
 
 class TestIndex(unittest.TestCase):

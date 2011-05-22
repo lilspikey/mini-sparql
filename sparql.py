@@ -29,7 +29,7 @@ def _create_binary_operator():
 def _operator_keyword(symbol, op):
     return Keyword(symbol).setParseAction(lambda s, loc, toks: op)
 
-def _query_parser():
+def _query_parser(store):
     variable = Combine('?' + Word(alphas))
     variables = OneOrMore(variable)
 
@@ -41,7 +41,7 @@ def _query_parser():
         return toks
     
     triple = (triple_value + triple_value + triple_value)\
-                .setParseAction(lambda s, loc, toks: Pattern(*toks))
+                .setParseAction(lambda s, loc, toks: Pattern(store, *toks))
     triples_block = delimitedList(triple,
                         delim=Optional(Literal('.').suppress())) \
                         .setParseAction(group_if_multiple) \
@@ -84,49 +84,6 @@ def _query_parser():
     query = prologue + Group(select_query).setResultsName('query')
     return query
 
-_qp = _query_parser()
-
-def parse_query(q):
-    return _qp.parseString(q)
-
-_triples = []
-
-def add_triples(*triples):
-    _triples.extend(triples)
-
-def clear_triples():
-    global _triples
-    _triples = []
-
-def _matches(triple1, triple2):
-    for t1, t2 in zip(triple1, triple2):
-        if t1 != t2 and not t1.startswith('?'):
-            return False
-    return True
-
-def _var_name(name):
-    if isinstance(name, basestring) and name.startswith('?'):
-        return name[1:]
-    return None
-
-def _get_matches(pattern, triple):
-    return dict((_var_name(a), b) for (a,b) in zip(pattern, triple) if _var_name(a))
-
-def match_triples(pattern, existing=None):
-    if existing is None:
-        existing = {}
-    triple = tuple(existing.get(_var_name(a), a) for a in pattern)
-    for a, b, c in _triples:
-        if _matches(triple, (a, b, c)):
-            matches = _get_matches(pattern, (a, b, c))
-            matches.update(existing)
-            yield matches
-
-def query(q):
-    p = parse_query(q)
-    name, variables, patterns = p.query
-    
-    return SelectQuery(name, variables, patterns)
 
 def _uniq(l):
     seen = set()
@@ -152,7 +109,8 @@ class SelectQuery(object):
             yield tuple(match.get(_var_name(v)) for v in variables)
 
 class Pattern(object):
-    def __init__(self, a, b, c):
+    def __init__(self, store, a, b, c):
+        self.store = store
         self.pattern = (a, b, c)
     
     @property
@@ -160,7 +118,7 @@ class Pattern(object):
         return [v for v in self.pattern if v.startswith('?')]
     
     def match(self, solution=None):
-        for m in match_triples(self.pattern, solution):
+        for m in self.store.match_triples(self.pattern, solution):
             yield m
     
     def __repr__(self):
@@ -331,21 +289,71 @@ class Index(object):
             except KeyError:
                 pass
 
-def import_file(filename):
-    triple = Group(_literal + _literal + _literal + Literal('.').suppress())
-    
-    turtle = ZeroOrMore(triple)
-    
-    add_triples(*turtle.parseFile(filename, parseAll=True))
 
-def run_prompt():
+class TripleStore(object):
+    
+    def __init__(self):
+        self._triples = []
+    
+    def add_triples(self, *triples):
+        self._triples.extend(triples)
+
+    def clear_triples(self):
+        self._triples = []
+
+    def match_triples(self, pattern, existing=None):
+        if existing is None:
+            existing = {}
+        triple = tuple(existing.get(_var_name(a), a) for a in pattern)
+        for a, b, c in self._triples:
+            if _matches(triple, (a, b, c)):
+                matches = _get_matches(pattern, (a, b, c))
+                matches.update(existing)
+                yield matches
+    
+    def parse_query(self, q):
+        _qp = _query_parser(self)
+
+        return _qp.parseString(q)
+
+    def query(self, q):
+        p = self.parse_query(q)
+        name, variables, patterns = p.query
+
+        return SelectQuery(name, variables, patterns)
+    
+    def import_file(self, filename):
+        triple = Group(_literal + _literal + _literal + Literal('.').suppress())
+
+        turtle = ZeroOrMore(triple)
+
+        self.add_triples(*turtle.parseFile(filename, parseAll=True))
+
+
+
+def _matches(triple1, triple2):
+    for t1, t2 in zip(triple1, triple2):
+        if t1 != t2 and not t1.startswith('?'):
+            return False
+    return True
+
+def _var_name(name):
+    if isinstance(name, basestring) and name.startswith('?'):
+        return name[1:]
+    return None
+
+def _get_matches(pattern, triple):
+    return dict((_var_name(a), b) for (a,b) in zip(pattern, triple) if _var_name(a))
+
+
+def run_prompt(store):
     import cmd
     class Sparql(cmd.Cmd):
         prompt='sparql> '
         
         def default(self, line):
             try:
-                q = query(line)
+                q = store.query(line)
                 print q.variables
                 for row in q:
                     print row
@@ -356,6 +364,7 @@ def run_prompt():
     s.cmdloop()
 
 if __name__ == '__main__':
+    store = TripleStore()
     if len(sys.argv) > 1:
-        import_file(sys.argv[1])
-    run_prompt()
+        store.import_file(sys.argv[1])
+    run_prompt(store)
