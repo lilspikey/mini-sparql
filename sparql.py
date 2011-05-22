@@ -1,6 +1,6 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
-                      Optional, ZeroOrMore, Keyword, Forward, delimitedList, \
-                      ParseException, QuotedString
+                      Optional, ZeroOrMore, CaselessKeyword, Keyword, Forward, \
+                      delimitedList, ParseException, QuotedString
 
 import sys
 import operator
@@ -54,9 +54,9 @@ def _query_parser(store):
             return UnionGroup(toks[0], toks[-1])
         return toks
     
-    group_or_union_pattern = (group_pattern + Optional(Keyword('UNION') + group_pattern)) \
+    group_or_union_pattern = (group_pattern + Optional(CaselessKeyword('UNION') + group_pattern)) \
                                 .setParseAction(possible_union_group)
-    optional_graph_pattern = (Keyword('OPTIONAL').suppress() + group_pattern) \
+    optional_graph_pattern = (CaselessKeyword('OPTIONAL').suppress() + group_pattern) \
                                 .setParseAction(lambda s, loc, toks: OptionalGroup(toks[0]))
     
     binary_operator = _create_binary_operator()
@@ -66,7 +66,7 @@ def _query_parser(store):
     
     filter_expression = Literal('(').suppress() + binary_expression + Literal(')').suppress()
     
-    filter_pattern = (Keyword('FILTER').suppress() + filter_expression) \
+    filter_pattern = (CaselessKeyword('FILTER').suppress() + filter_expression) \
                         .setParseAction(lambda s, loc, toks: Filter(toks[0]))
     
     not_triples_pattern = optional_graph_pattern | group_or_union_pattern | filter_pattern
@@ -75,23 +75,25 @@ def _query_parser(store):
                       (Optional(triples_block) + ZeroOrMore(not_triples_pattern) + Optional(triples_block)) + \
                       Literal('}').suppress())
     
-    prefix = Group(Keyword('PREFIX').suppress() + Combine(Word(alphas) + ':').setResultsName('name') + QuotedString('<', unquoteResults=False, endQuoteChar='>').setResultsName('value'))
+    prefix = Group(CaselessKeyword('PREFIX').suppress() + Combine(Word(alphas) + ':').setResultsName('name') + QuotedString('<', unquoteResults=False, endQuoteChar='>').setResultsName('value'))
 
     prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
     
-    order_by = Keyword('ORDER').suppress() + Keyword('BY').suppress() + \
+    order_by = CaselessKeyword('ORDER').suppress() + CaselessKeyword('BY').suppress() + \
                (
                 (
-                    (Keyword('ASC') | Keyword('DESC'))
+                    (CaselessKeyword('ASC') | CaselessKeyword('DESC'))
                    + Literal('(').suppress() + variable + Literal(')').suppress()
                 )
                 
                 | variable
-               ).setParseAction(lambda s, loc, toks: OrderBy(toks[-1], toks[0] != 'DESC'))
+               ).setParseAction(
+                    lambda s, loc, toks: OrderBy(toks[-1], len(toks) == 1 or toks[0].upper() != 'DESC')
+               )
     
     select_query = Keyword('SELECT') + \
                    Group(variables | Keyword('*')) + \
-                   Keyword('WHERE').suppress() + group_pattern + \
+                   CaselessKeyword('WHERE').suppress() + group_pattern + \
                    Optional(order_by)
 
     query = prologue + Group(select_query).setResultsName('query')
