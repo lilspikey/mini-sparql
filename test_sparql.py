@@ -389,6 +389,10 @@ class TestIndex(unittest.TestCase):
         self.index = Index([0, 1, 2])
         self.index2 = Index([2, 0, 1])
     
+    def test___create_key(self):
+        self.assertEqual(('a', 'b', 'c'), self.index._create_key(('a', 'b', 'c')))
+        self.assertEqual(('c', 'a', 'b'), self.index2._create_key(('a', 'b', 'c')))
+    
     def test_insert(self):
         self.index.insert(('a', 'b', 'c'))
         self.assertEqual({ 'a': { 'b': { 'c': ('a', 'b', 'c') } } },
@@ -422,7 +426,54 @@ class TestIndex(unittest.TestCase):
     def test_match_full(self):
         self._check_match_full(self.index)
         self._check_match_full(self.index2)
-
+    
+    def test_match_partial(self):
+        self.index.insert(('a', 'b', 'c'))
+        self.index.insert(('c', 'c', 'c'))
+        self.index.insert(('a', 'b', 'b'))
+        self.index.insert(('a', 'a', 'b'))
+        
+        self.assertEqual(
+            set([('a', 'b', 'c'),
+                 ('a', 'b', 'b')]),
+            set(self.index.match(('a', 'b', '?three')))
+        )
+        self.assertEqual(
+            set([('a', 'b', 'c'),
+                 ('a', 'b', 'b'),
+                 ('a', 'a', 'b')]),
+            set(self.index.match(('a', '?two', '?three')))
+        )
+        self.assertEqual(
+            set([('a', 'b', 'c'),
+                 ('c', 'c', 'c'),
+                 ('a', 'b', 'b'),
+                 ('a', 'a', 'b')]),
+            set(self.index.match(('?one', '?two', '?three')))
+        )
+    
+    def test_key_error_if_not_indexed(self):
+        self.index2.insert(('a', 'b', 'c'))
+        self.index2.insert(('c', 'c', 'c'))
+        self.index2.insert(('a', 'b', 'b'))
+        self.index2.insert(('a', 'a', 'b'))
+        
+        self.assertEqual(
+            set([('a', 'b', 'c')]),
+            set(self.index2.match(('a', '?one', 'c')))
+        )
+        
+        try:
+            set(self.index2.match(('a', 'b', '?three')))
+            self.fail('This index should not work with provided match')
+        except LookupError:
+            pass
+        
+        try:
+            set(self.index2.match(('?one', 'b', 'c')))
+            self.fail('This index should not work with provided match')
+        except LookupError:
+            pass
 
 if __name__ == '__main__':
     unittest.main()

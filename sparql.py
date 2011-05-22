@@ -305,13 +305,20 @@ class Index(object):
         key = self._create_key(triple)
         return self._match(self._index, key)
     
-    def _match_remaining(self, index):
-        pass
+    def _match_remaining(self, index, key):
+        if _var_name(key[0]) is None:
+            raise LookupError(key)
+        for v in index.values():
+            if getattr(v, 'values', None) is not None:
+                for m in self._match_remaining(v, key[1:]):
+                    yield m
+            else:
+                yield v
     
     def _match(self, index, key):
         name = _var_name(key[0])
         if name is not None:
-            for m in self._match_remaining(index):
+            for m in self._match_remaining(index, key):
                 yield m
         else:
             try:
