@@ -1,6 +1,6 @@
 from sparql import parse_query, add_triples, match_triples, query, \
                    clear_triples, Pattern, PatternGroup, OptionalGroup, \
-                   UnionGroup
+                   UnionGroup, Index
 import unittest
 
 class TestParsing(unittest.TestCase):
@@ -382,6 +382,46 @@ class TestQuery(unittest.TestCase):
             [(100,)],
             list(query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 100) }'))
         )
+
+class TestIndex(unittest.TestCase):
+    
+    def setUp(self):
+        self.index = Index([0, 1, 2])
+        self.index2 = Index([2, 0, 1])
+    
+    def test_insert(self):
+        self.index.insert(('a', 'b', 'c'))
+        self.assertEqual({ 'a': { 'b': { 'c': ('a', 'b', 'c') } } },
+                         self.index._index)
+        
+        self.index2.insert(('a', 'b', 'c'))
+        self.assertEqual({ 'c': { 'a': { 'b': ('a', 'b', 'c') } } },
+                         self.index2._index)
+    
+    def _check_match_full(self, index):
+        index.insert(('a', 'b', 'c'))
+        index.insert(('c', 'c', 'c'))
+        index.insert(('a', 'b', 'b'))
+        self.assertEqual(
+            [('a', 'b', 'c')],
+            list(index.match(('a', 'b', 'c')))
+        )
+        self.assertEqual(
+            [],
+            list(index.match(('a', 'b', 'd')))
+        )
+        self.assertEqual(
+            [],
+            list(index.match(('a', 'd', 'c')))
+        )
+        self.assertEqual(
+            [],
+            list(index.match(('d', 'b', 'c')))
+        )
+    
+    def test_match_full(self):
+        self._check_match_full(self.index)
+        self._check_match_full(self.index2)
 
 
 if __name__ == '__main__':

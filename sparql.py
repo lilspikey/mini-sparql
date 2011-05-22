@@ -277,6 +277,52 @@ class BinaryExpression(object):
     def __repr__(self):
         return u'%s %s %s' % (self.lhs, self.operator.__name__, self.rhs)
 
+class Index(object):
+    
+    def __init__(self, permutation):
+        self.permutation = permutation
+        self._index = {}
+    
+    def _create_key(self, triple):
+        return tuple(triple[i] for i in self.permutation)
+    
+    def insert(self, triple):
+        key = self._create_key(triple)
+        self._insert(self._index, key, triple)
+    
+    def _insert(self, index, key, triple):
+        if len(key) == 1:
+            index[key[0]] = triple
+        else:
+            try:
+                subindex = index[key[0]]
+            except KeyError:
+                subindex = {}
+                index[key[0]] = subindex
+            self._insert(subindex, key[1:], triple)
+    
+    def match(self, triple):
+        key = self._create_key(triple)
+        return self._match(self._index, key)
+    
+    def _match_remaining(self, index):
+        pass
+    
+    def _match(self, index, key):
+        name = _var_name(key[0])
+        if name is not None:
+            for m in self._match_remaining(index):
+                yield m
+        else:
+            try:
+                if len(key) == 1:
+                    yield index[key[0]]
+                else:
+                    subindex = index[key[0]]
+                    for m in self._match(subindex, key[1:]):
+                        yield m
+            except KeyError:
+                pass
 
 def import_file(filename):
     triple = Group(_literal + _literal + _literal + Literal('.').suppress())
