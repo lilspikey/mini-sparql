@@ -78,8 +78,21 @@ def _query_parser(store):
     prefix = Group(Keyword('PREFIX').suppress() + Combine(Word(alphas) + ':').setResultsName('name') + QuotedString('<', unquoteResults=False, endQuoteChar='>').setResultsName('value'))
 
     prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
-
-    select_query = Keyword('SELECT') + Group(variables | Keyword('*')) + Keyword('WHERE').suppress() + group_pattern
+    
+    order_by = Keyword('ORDER').suppress() + Keyword('BY').suppress() + \
+               (
+                (
+                    (Keyword('ASC') | Keyword('DESC'))
+                   + Literal('(').suppress() + variable + Literal(')').suppress()
+                )
+                
+                | variable
+               ).setParseAction(lambda s, loc, toks: OrderBy(toks[-1], toks[0] != 'DESC'))
+    
+    select_query = Keyword('SELECT') + \
+                   Group(variables | Keyword('*')) + \
+                   Keyword('WHERE').suppress() + group_pattern + \
+                   Optional(order_by)
 
     query = prologue + Group(select_query).setResultsName('query')
     return query
@@ -95,17 +108,22 @@ def _uniq(l):
     return u
 
 class SelectQuery(object):
-    def __init__(self, name, variables, patterns):
+    def __init__(self, name, variables, patterns, order_by):
         self.name = name
         if len(variables) == 1 and variables[0] == '*':
             variables = patterns.variables
         self.variables = tuple(_uniq(variables))
         self.patterns = patterns
+        self.order_by = order_by
     
     def __iter__(self):
         variables = self.variables
         
-        for match in self.patterns.match({}):
+        matches = self.patterns.match({})
+        if self.order_by is not None:
+            matches = self.order_by.order(matches)
+        
+        for match in matches:
             yield tuple(match.get(_var_name(v)) for v in variables)
 
 class Pattern(object):
@@ -235,6 +253,20 @@ class BinaryExpression(object):
     def __repr__(self):
         return u'%s %s %s' % (self.lhs, self.operator.__name__, self.rhs)
 
+
+class OrderBy(object):
+    def __init__(self, expression, asc):
+        self.expression = expression
+        self.asc = asc
+    
+    def _key(self, solution):
+        name = _var_name(self.expression)
+        return solution.get(name)
+    
+    def order(self, matches):
+        return sorted(matches, key=self._key, reverse=(not self.asc))
+
+
 class Index(object):
     
     def __init__(self, permutation):
@@ -318,9 +350,13 @@ class TripleStore(object):
 
     def query(self, q):
         p = self.parse_query(q)
-        name, variables, patterns = p.query
+        if len(p.query) == 3:
+            name, variables, patterns = p.query
+            order_by = None
+        else:
+            name, variables, patterns, order_by = p.query
 
-        return SelectQuery(name, variables, patterns)
+        return SelectQuery(name, variables, patterns, order_by)
     
     def import_file(self, filename):
         triple = Group(_literal + _literal + _literal + Literal('.').suppress())

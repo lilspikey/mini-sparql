@@ -386,6 +386,21 @@ class TestQuery(unittest.TestCase):
             [(100,)],
             list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 100) }'))
         )
+        
+    def test_order_by(self):
+        self.assertEqual(
+            [('a', 'name-a'), ('b', 'name-b')],
+            list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name } ORDER BY ?name'))
+        )
+        self.assertEqual(
+            [('a', 'name-a'), ('b', 'name-b')],
+            list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name } ORDER BY ASC(?name)'))
+        )
+        self.assertEqual(
+            [('b', 'name-b'), ('a', 'name-a')],
+            list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name } ORDER BY DESC(?name)'))
+        )
+
 
 class TestIndex(unittest.TestCase):
     
