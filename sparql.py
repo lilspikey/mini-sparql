@@ -33,10 +33,13 @@ def _operator_keyword(symbol, op):
     return Keyword(symbol).setParseAction(lambda s, loc, toks: op)
 
 def _query_parser(store):
-    variable = Combine('?' + Word(alphas))
+    variable = Combine(Literal('?').suppress() + Word(alphas)) \
+                .setParseAction(lambda s, loc, toks: VariableExpression(toks[0]))
     variables = OneOrMore(variable)
-
-    triple_value = variable | _literal
+    
+    literal = _literal.copy().setParseAction(lambda s, loc, toks: LiteralExpression(toks[0]))
+    
+    triple_value = variable | literal
     
     def group_if_multiple(s, loc, toks):
         if len(toks) > 1:
@@ -65,7 +68,7 @@ def _query_parser(store):
     binary_operator = _create_binary_operator()
     
     binary_expression = (triple_value + binary_operator + triple_value) \
-                            .setParseAction(lambda s, loc, toks: BinaryExpression(*toks))
+                            .setParseAction(lambda s, loc, toks: BooleanExpression(*toks))
     
     filter_expression = Literal('(').suppress() + binary_expression + Literal(')').suppress()
     
@@ -141,7 +144,8 @@ class SelectQuery(object):
         matches = islice(matches, self.offset, stop)
         
         for match in matches:
-            yield tuple(match.get(_var_name(v)) for v in variables)
+            yield tuple(v.resolve(match) for v in variables)
+
 
 class Pattern(object):
     def __init__(self, store, a, b, c):
@@ -150,7 +154,7 @@ class Pattern(object):
     
     @property
     def variables(self):
-        return [v for v in self.pattern if v.startswith('?')]
+        return [v for v in self.pattern if getattr(v, 'name', None)]
     
     def match(self, solution=None):
         for m in self.store.match_triples(self.pattern, solution):
@@ -250,25 +254,51 @@ class Filter(object):
         return 'Filter(%r)' % (self.expression)
 
 
-class BinaryExpression(object):
+class Expression(object):
+    pass
+
+
+class BooleanExpression(Expression):
     def __init__(self, lhs, operator, rhs):
         self.lhs = lhs
         self.operator = operator
         self.rhs = rhs
     
-    def _resolve(self, solution, a):
-        name = _var_name(a)
-        if name is None:
-            return a
-        return solution.get(name)
-    
     def matches(self, solution):
-        a = self._resolve(solution, self.lhs)
-        b = self._resolve(solution, self.rhs)
+        a = self.lhs.resolve(solution)
+        b = self.rhs.resolve(solution)
         return self.operator(a, b)
     
     def __repr__(self):
         return u'%s %s %s' % (self.lhs, self.operator.__name__, self.rhs)
+
+
+class VariableExpression(Expression):
+    def __init__(self, name):
+        self.name = name
+    
+    def resolve(self, solution):
+        return solution.get(self.name)
+    
+    def __eq__(self, other):
+        return self.name == getattr(other, 'name', None)
+    
+    def __hash__(self):
+        return hash(self.name)
+    
+    def __repr__(self):
+        return u'VariableExpression(%s)' % self.name
+
+
+class LiteralExpression(Expression):
+    def __init__(self, value):
+        self.value = value
+    
+    def resolve(self, solution):
+        return self.value
+    
+    def __repr__(self):
+        return u'LiteralExpression(%s)' % self.value
 
 
 class OrderBy(object):
@@ -277,8 +307,7 @@ class OrderBy(object):
         self.asc = asc
     
     def _key(self, solution):
-        name = _var_name(self.expression)
-        return solution.get(name)
+        return self.expression.resolve(solution)
     
     def order(self, matches):
         return sorted(matches, key=self._key, reverse=(not self.asc))
@@ -316,11 +345,11 @@ class Index(object):
             self._insert(subindex, key[1:], triple)
     
     def match(self, triple):
-        key = self._create_key(triple)
+        key = self._create_key(tuple(t.resolve({}) for t in triple))
         return self._match(self._index, key)
     
     def _match_remaining(self, index, key):
-        if _var_name(key[0]) is None:
+        if key[0] is not None:
             raise LookupError(key)
         for v in index.values():
             if getattr(v, 'values', None) is not None:
@@ -330,8 +359,7 @@ class Index(object):
                 yield v
     
     def _match(self, index, key):
-        name = _var_name(key[0])
-        if name is not None:
+        if key[0] is None:
             for m in self._match_remaining(index, key):
                 yield m
         else:
@@ -360,7 +388,7 @@ class TripleStore(object):
     def match_triples(self, pattern, existing=None):
         if existing is None:
             existing = {}
-        triple = tuple(existing.get(_var_name(a), a) for a in pattern)
+        triple = tuple(a.resolve(existing) for a in pattern)
         for a, b, c in self._triples:
             if _matches(triple, (a, b, c)):
                 matches = _get_matches(pattern, (a, b, c))
@@ -401,20 +429,15 @@ class TripleStore(object):
         self.add_triples(*turtle.parseFile(filename, parseAll=True))
 
 
-
-def _matches(triple1, triple2):
-    for t1, t2 in zip(triple1, triple2):
-        if t1 != t2 and not t1.startswith('?'):
+def _matches(pattern, triple):
+    for p, t in zip(pattern, triple):
+        if not(p is None or p == t):
             return False
     return True
 
-def _var_name(name):
-    if isinstance(name, basestring) and name.startswith('?'):
-        return name[1:]
-    return None
 
 def _get_matches(pattern, triple):
-    return dict((_var_name(a), b) for (a,b) in zip(pattern, triple) if _var_name(a))
+    return dict((getattr(a, 'name'), b) for (a,b) in zip(pattern, triple) if getattr(a, 'name', None))
 
 
 def run_prompt(store):

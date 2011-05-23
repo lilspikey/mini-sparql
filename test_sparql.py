@@ -1,5 +1,5 @@
 from sparql import TripleStore, Pattern, PatternGroup, OptionalGroup, \
-                   UnionGroup, Index
+                   UnionGroup, Index, VariableExpression, LiteralExpression
 import unittest
 
 class TestParsing(unittest.TestCase):
@@ -19,13 +19,14 @@ class TestParsing(unittest.TestCase):
 
         self.assertEqual('SELECT', name)
         self.assertEqual(1, len(variables))
-        self.assertEquals('?title', variables[0])
+        self.assertTrue(isinstance(variables[0], VariableExpression))
+        self.assertEquals('title', variables[0].name)
         self.assertTrue(isinstance(pattern, Pattern))
         triple = pattern.pattern
         self.assertEqual(3, len(triple))
-        self.assertEqual('<http://example.org/book/book1>', triple[0])
-        self.assertEqual('<http://purl.org/dc/elements/1.1/title>', triple[1])
-        self.assertEqual('?title', triple[2])
+        self.assertEqual('<http://example.org/book/book1>', triple[0].value)
+        self.assertEqual('<http://purl.org/dc/elements/1.1/title>', triple[1].value)
+        self.assertEqual('title', triple[2].name)
     
     def test_parse_query_select_with_prefix(self):
         p = self.store.parse_query("""PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
@@ -44,14 +45,18 @@ class TestParsing(unittest.TestCase):
         
         name, variables, pattern = p.query
         self.assertEqual(2, len(variables))
-        self.assertEqual('?x', variables[0])
-        self.assertEqual('?name', variables[1])
+        self.assertTrue(isinstance(variables[0], VariableExpression))
+        self.assertEquals('x', variables[0].name)
+        self.assertTrue(isinstance(variables[1], VariableExpression))
+        self.assertEquals('name', variables[1].name)
         
         self.assertTrue(isinstance(pattern, Pattern))
         triple = pattern.pattern
-        self.assertEqual('?x', triple[0])
-        self.assertEqual('foaf:name', triple[1])
-        self.assertEqual('?name', triple[2])
+        self.assertTrue(isinstance(triple[0], VariableExpression))
+        self.assertEquals('x', triple[0].name)
+        self.assertEqual('foaf:name', triple[1].value)
+        self.assertTrue(isinstance(triple[2], VariableExpression))
+        self.assertEquals('name', triple[2].name)
 
 
 class TestMatchTriples(unittest.TestCase):
@@ -64,16 +69,41 @@ class TestMatchTriples(unittest.TestCase):
                                ('b', 'name', 'd'),
                                ('a', 'weight', 'c'))
         
-        self.assertEqual([{}], list(self.store.match_triples(('a', 'name', 'c'))))
+        self.assertEqual([{}],
+            list(self.store.match_triples(
+                    (
+                        LiteralExpression('a'),
+                        LiteralExpression('name'),
+                        LiteralExpression('c')))
+                    )
+                )
         self.assertEqual([dict(value='c')],
-                         list(self.store.match_triples(('a', 'name', '?value'))))
+                         list(self.store.match_triples(
+                            (
+                                LiteralExpression('a'),
+                                LiteralExpression('name'),
+                                VariableExpression('value')
+                            )
+                        )))
         self.assertEqual([dict(id='a', value='c'),
                           dict(id='b', value='d')],
-                         list(self.store.match_triples(('?id', 'name', '?value'))))
+                         list(self.store.match_triples(
+                                (
+                                    VariableExpression('id'),
+                                    LiteralExpression('name'),
+                                    VariableExpression('value')
+                                )
+                        )))
         self.assertEqual([dict(id='a', property='name', value='c'),
                           dict(id='b', property='name', value='d'),
                           dict(id='a', property='weight', value='c')],
-                         list(self.store.match_triples(('?id', '?property', '?value'))))
+                         list(self.store.match_triples(
+                                    (
+                                        VariableExpression('id'),
+                                        VariableExpression('property'),
+                                        VariableExpression('value')
+                                    )
+                            )))
 
 class TestPattern(unittest.TestCase):
     
@@ -81,7 +111,7 @@ class TestPattern(unittest.TestCase):
         self.store = TripleStore()
         self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
-        self.p = Pattern(self.store, '?id', 'name', '?name')
+        self.p = Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name'))
     
     def test_match_empty_solution(self):
         self.assertEqual(
@@ -112,7 +142,7 @@ class TestOptionalGroup(unittest.TestCase):
         self.store = TripleStore()
         self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
-        self.p = OptionalGroup(Pattern(self.store, '?id', 'name', '?name'))
+        self.p = OptionalGroup(Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name')))
     
     def test_match_empty_solution(self):
         self.assertEqual(
@@ -151,8 +181,8 @@ class TestUnionGroup(unittest.TestCase):
         self.store = TripleStore()
         self.store.add_triples(('a', 'name', 'name-a'), ('b', 'name', 'name-b'),
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
-        self.p = UnionGroup(Pattern(self.store, '?id', 'name', '?name'),
-                            Pattern(self.store, '?id', 'weight', '?weight'))
+        self.p = UnionGroup(Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name')),
+                            Pattern(self.store, VariableExpression('id'), LiteralExpression('weight'), VariableExpression('weight')))
 
     def test_match_empty_solution(self):
         self.assertEqual(
@@ -183,16 +213,16 @@ class TestPatternGroup(unittest.TestCase):
                     ('a', 'weight', 'weight-a'), ('b', 'size', 'size-b'))
     
     def test_match_empty_solution(self):
-        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
-                          Pattern(self.store, '?id', 'weight', '?weight')])
+        p = PatternGroup([Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name')),
+                          Pattern(self.store, VariableExpression('id'), LiteralExpression('weight'), VariableExpression('weight'))])
         self.assertEqual(
             [dict(id='a', name='name-a', weight='weight-a')],
             list(p.match({}))
         )
     
     def test_match_with_constraining_solution(self):
-        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
-                          Pattern(self.store, '?id', 'weight', '?weight')])
+        p = PatternGroup([Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name')),
+                          Pattern(self.store, VariableExpression('id'), LiteralExpression('weight'), VariableExpression('weight'))])
         self.assertEqual(
             [],
             list(p.match({'id': 'b'}))
@@ -203,8 +233,8 @@ class TestPatternGroup(unittest.TestCase):
         )
     
     def test_with_optional(self):
-        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
-                          OptionalGroup(Pattern(self.store, '?id', 'weight', '?weight'))])
+        p = PatternGroup([Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name')),
+                          OptionalGroup(Pattern(self.store, VariableExpression('id'), LiteralExpression('weight'), VariableExpression('weight')))])
         self.assertEqual(
             [dict(id='a', name='name-a', weight='weight-a'),
              dict(id='b', name='name-b')],
@@ -220,9 +250,9 @@ class TestPatternGroup(unittest.TestCase):
         )
 
     def test_with_optional_multiple(self):
-        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
-                          OptionalGroup(Pattern(self.store, '?id', 'weight', '?weight')),
-                          OptionalGroup(Pattern(self.store, '?id', 'size', '?size'))])
+        p = PatternGroup([Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name')),
+                          OptionalGroup(Pattern(self.store, VariableExpression('id'), LiteralExpression('weight'), VariableExpression('weight'))),
+                          OptionalGroup(Pattern(self.store, VariableExpression('id'), LiteralExpression('size'), VariableExpression('size')))])
         self.assertEqual(
             [dict(id='a', name='name-a', weight='weight-a'),
              dict(id='b', name='name-b', size='size-b')],
@@ -242,10 +272,10 @@ class TestPatternGroup(unittest.TestCase):
         )
 
     def test_with_optional_group(self):
-        p = PatternGroup([Pattern(self.store, '?id', 'name', '?name'),
+        p = PatternGroup([Pattern(self.store, VariableExpression('id'), LiteralExpression('name'), VariableExpression('name')),
                           OptionalGroup(
-                            PatternGroup([Pattern(self.store, '?id', 'weight', '?weight'),
-                                          Pattern(self.store, '?id', 'size', '?size')])
+                            PatternGroup([Pattern(self.store, VariableExpression('id'), LiteralExpression('weight'), VariableExpression('weight')),
+                                          Pattern(self.store, VariableExpression('id'), LiteralExpression('size'), VariableExpression('size'))])
                           )])
         self.assertEqual(
             [dict(id='a', name='name-a'),
@@ -331,11 +361,11 @@ class TestQuery(unittest.TestCase):
     
     def test_star_has_right_column_order(self):
         q = self.store.query('SELECT * WHERE { ?id name ?name }')
-        self.assertEqual(('?id', '?name'), q.variables)
+        self.assertEqual(('id', 'name'), tuple(v.name for v in q.variables))
         q = self.store.query('SELECT * WHERE { { ?id name ?name} UNION {?id weight ?weight} }')
-        self.assertEqual(('?id', '?name', '?weight'), q.variables)
+        self.assertEqual(('id', 'name', 'weight'), tuple(v.name for v in q.variables))
         q = self.store.query('SELECT * WHERE { ?id name ?value OPTIONAL {?id weight ?weight} }')
-        self.assertEqual(('?id', '?value', '?weight'), q.variables)
+        self.assertEqual(('id', 'value', 'weight'), tuple(v.name for v in q.variables))
     
     def test_filter(self):
         self.assertEqual(
@@ -440,19 +470,19 @@ class TestIndex(unittest.TestCase):
         index.insert(('a', 'b', 'b'))
         self.assertEqual(
             [('a', 'b', 'c')],
-            list(index.match(('a', 'b', 'c')))
+            list(index.match((LiteralExpression('a'), LiteralExpression('b'), LiteralExpression('c'))))
         )
         self.assertEqual(
             [],
-            list(index.match(('a', 'b', 'd')))
+            list(index.match((LiteralExpression('a'), LiteralExpression('b'), LiteralExpression('d'))))
         )
         self.assertEqual(
             [],
-            list(index.match(('a', 'd', 'c')))
+            list(index.match((LiteralExpression('a'), LiteralExpression('d'), LiteralExpression('c'))))
         )
         self.assertEqual(
             [],
-            list(index.match(('d', 'b', 'c')))
+            list(index.match((LiteralExpression('d'), LiteralExpression('b'), LiteralExpression('c'))))
         )
     
     def test_match_full(self):
@@ -468,20 +498,20 @@ class TestIndex(unittest.TestCase):
         self.assertEqual(
             set([('a', 'b', 'c'),
                  ('a', 'b', 'b')]),
-            set(self.index.match(('a', 'b', '?three')))
+            set(self.index.match((LiteralExpression('a'), LiteralExpression('b'), VariableExpression('three'))))
         )
         self.assertEqual(
             set([('a', 'b', 'c'),
                  ('a', 'b', 'b'),
                  ('a', 'a', 'b')]),
-            set(self.index.match(('a', '?two', '?three')))
+            set(self.index.match((LiteralExpression('a'), VariableExpression('two'), VariableExpression('three'))))
         )
         self.assertEqual(
             set([('a', 'b', 'c'),
                  ('c', 'c', 'c'),
                  ('a', 'b', 'b'),
                  ('a', 'a', 'b')]),
-            set(self.index.match(('?one', '?two', '?three')))
+            set(self.index.match((VariableExpression('one'), VariableExpression('two'), VariableExpression('three'))))
         )
     
     def test_key_error_if_not_indexed(self):
@@ -492,17 +522,17 @@ class TestIndex(unittest.TestCase):
         
         self.assertEqual(
             set([('a', 'b', 'c')]),
-            set(self.index2.match(('a', '?one', 'c')))
+            set(self.index2.match((LiteralExpression('a'), VariableExpression('one'), LiteralExpression('c'))))
         )
         
         try:
-            set(self.index2.match(('a', 'b', '?three')))
+            set(self.index2.match((LiteralExpression('a'), LiteralExpression('b'), VariableExpression('three'))))
             self.fail('This index should not work with provided match')
         except LookupError:
             pass
         
         try:
-            set(self.index2.match(('?one', 'b', 'c')))
+            set(self.index2.match((VariableExpression('one'), LiteralExpression('b'), LiteralExpression('c'))))
             self.fail('This index should not work with provided match')
         except LookupError:
             pass
