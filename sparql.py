@@ -45,11 +45,12 @@ def _query_parser(store):
     def insert_prefix(p):
         if isinstance(p, LiteralExpression):
             value = p.value
-            for prefix in prefixes:
-                if value.startswith(prefix):
-                    iri = prefixes[prefix]
-                    p.value = iri + value[len(prefix):]
-                    break
+            if isinstance(value, basestring):
+                for prefix in prefixes:
+                    if value.startswith(prefix):
+                        iri = prefixes[prefix]
+                        p.value = iri + value[len(prefix):]
+                        break
         return p
     
     variable = Combine(Literal('?').suppress() + Word(alphas)) \
