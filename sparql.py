@@ -12,7 +12,8 @@ _number = _float | _integer
 _string = QuotedString('"""', escChar='\\', multiline=True) \
         | QuotedString('\'\'\'', escChar='\\', multiline=True) \
         | QuotedString('"', escChar='\\') | QuotedString('\'', escChar='\\')
-_iri = QuotedString('<', unquoteResults=False, endQuoteChar='>') | Combine(Word(alphas) + ':' + Word(alphas))
+_full_iri = QuotedString('<', endQuoteChar='>')
+_iri = _full_iri | Combine(Word(alphas) + ':' + Word(alphas))
 _boolean = (Keyword('true') | Keyword('false')).setParseAction(lambda s, loc, toks: toks[0] == 'true')
 
 _literal = _number | _string | _iri | _boolean | Word(alphas)
@@ -33,6 +34,24 @@ def _operator_keyword(symbol, op):
     return Keyword(symbol).setParseAction(lambda s, loc, toks: op)
 
 def _query_parser(store):
+    prefixes = {}
+    
+    def add_prefix(prefix, iri):
+        prefixes[prefix] = iri
+    
+    def insert_prefixes(pattern):
+        return tuple(insert_prefix(p) for p in pattern)
+    
+    def insert_prefix(p):
+        if isinstance(p, LiteralExpression):
+            value = p.value
+            for prefix in prefixes:
+                if value.startswith(prefix):
+                    iri = prefixes[prefix]
+                    p.value = iri + value[len(prefix):]
+                    break
+        return p
+    
     variable = Combine(Literal('?').suppress() + Word(alphas)) \
                 .setParseAction(lambda s, loc, toks: VariableExpression(toks[0]))
     variables = OneOrMore(variable)
@@ -47,7 +66,7 @@ def _query_parser(store):
         return toks
     
     triple = (triple_value + triple_value + triple_value)\
-                .setParseAction(lambda s, loc, toks: Pattern(store, *toks))
+                .setParseAction(lambda s, loc, toks: Pattern(store, *(insert_prefixes(toks))))
     triples_block = delimitedList(triple,
                         delim=Optional(Literal('.').suppress())) \
                         .setParseAction(group_if_multiple) \
@@ -81,7 +100,10 @@ def _query_parser(store):
                       (Optional(triples_block) + ZeroOrMore(not_triples_pattern) + Optional(triples_block)) + \
                       Literal('}').suppress())
     
-    prefix = Group(CaselessKeyword('PREFIX').suppress() + Combine(Word(alphas) + ':').setResultsName('name') + QuotedString('<', unquoteResults=False, endQuoteChar='>').setResultsName('value'))
+    prefix = Group(CaselessKeyword('PREFIX').suppress() +
+                    (Combine(Word(alphas) + ':').setResultsName('name') + _full_iri.setResultsName('value'))\
+                        .setParseAction(lambda s, loc, toks: add_prefix(toks[0], toks[1]))
+                  )
 
     prologue = Group(ZeroOrMore(prefix).setResultsName('prefixes')).setResultsName('prologue')
     

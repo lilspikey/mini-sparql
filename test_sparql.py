@@ -24,12 +24,12 @@ class TestParsing(unittest.TestCase):
         self.assertTrue(isinstance(pattern, Pattern))
         triple = pattern.pattern
         self.assertEqual(3, len(triple))
-        self.assertEqual('<http://example.org/book/book1>', triple[0].value)
-        self.assertEqual('<http://purl.org/dc/elements/1.1/title>', triple[1].value)
+        self.assertEqual('http://example.org/book/book1', triple[0].value)
+        self.assertEqual('http://purl.org/dc/elements/1.1/title', triple[1].value)
         self.assertEqual('title', triple[2].name)
     
     def test_parse_query_select_with_prefix(self):
-        p = self.store.parse_query("""PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+        p = self.store.parse_query("""PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT ?x ?name
         WHERE  { ?x foaf:name ?name }""")
         
@@ -41,7 +41,7 @@ class TestParsing(unittest.TestCase):
         self.assertTrue(hasattr(prefix, 'name'))
         self.assertEqual('foaf:', prefix.name)
         self.assertTrue(hasattr(prefix, 'value'))
-        self.assertEqual('<http://xmlns.com/foaf/0.1/>', prefix.value)
+        self.assertEqual('http://xmlns.com/foaf/0.1/', prefix.value)
         
         name, variables, pattern = p.query
         self.assertEqual(2, len(variables))
@@ -54,7 +54,7 @@ class TestParsing(unittest.TestCase):
         triple = pattern.pattern
         self.assertTrue(isinstance(triple[0], VariableExpression))
         self.assertEquals('x', triple[0].name)
-        self.assertEqual('foaf:name', triple[1].value)
+        self.assertEqual('http://xmlns.com/foaf/0.1/name', triple[1].value)
         self.assertTrue(isinstance(triple[2], VariableExpression))
         self.assertEquals('name', triple[2].name)
 
@@ -536,6 +536,7 @@ class TestIndex(unittest.TestCase):
             self.fail('This index should not work with provided match')
         except LookupError:
             pass
+    
 
 if __name__ == '__main__':
     unittest.main()
