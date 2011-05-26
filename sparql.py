@@ -448,8 +448,23 @@ class TripleStore(object):
         triple = Group(_literal + _literal + _literal + Literal('.').suppress())
 
         turtle = ZeroOrMore(triple)
-
-        self.add_triples(*turtle.parseFile(filename, parseAll=True))
+        
+        print 'Importing', filename, '...',
+        sys.stdout.flush()
+        
+        turtle = turtle.parseWithTabs()
+        from mmap import mmap
+        f = open(filename, 'r+b')
+        try:
+            m = mmap(f.fileno(), 0)
+            try:
+                self.add_triples(*turtle.parseString(m, parseAll=True))
+            finally:
+                m.close()
+        finally:
+            f.close()
+        print 'done'
+            
 
 
 def _matches(pattern, triple):
