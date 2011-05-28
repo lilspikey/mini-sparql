@@ -463,6 +463,11 @@ def _get_matches(pattern, triple):
     return dict((getattr(a, 'name'), b) for (a,b) in zip(pattern, triple) if getattr(a, 'name', None))
 
 
+def print_query_output(q):
+    print u', '.join(v.name for v in q.variables)
+    for row in q:
+        print u', '.join(repr(r) for r in row)
+
 def run_prompt(store):
     import cmd
     class Sparql(cmd.Cmd):
@@ -471,9 +476,7 @@ def run_prompt(store):
         def default(self, line):
             try:
                 q = store.query(line)
-                print u', '.join(v.name for v in q.variables)
-                for row in q:
-                    print u', '.join(repr(r) for r in row)
+                print_query_output(q)
             except ParseException, p:
                 print p
     
@@ -481,7 +484,21 @@ def run_prompt(store):
     s.cmdloop()
 
 if __name__ == '__main__':
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option('-e', dest='script', default='', help='script to execute')
+    options, args = parser.parse_args()
+    script = options.script
+    
     store = TripleStore()
     from fileinput import input
-    store.import_file(input())
-    run_prompt(store)
+    if not script and args:
+        store.import_file(input(args))
+        run_prompt(store)
+    elif script:
+        store.import_file(input(args))
+        try:
+            q = store.query(script)
+            print_query_output(q)
+        except ParseException, p:
+            print p
