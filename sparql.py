@@ -444,27 +444,12 @@ class TripleStore(object):
         
         return SelectQuery(name, variables, patterns, order_by, limit, offset)
     
-    def import_file(self, filename):
+    def import_file(self, file):
         triple = Group(_literal + _literal + _literal + Literal('.').suppress())
-
-        turtle = ZeroOrMore(triple)
         
-        print 'Importing', filename, '...',
-        sys.stdout.flush()
-        
-        turtle = turtle.parseWithTabs()
-        from mmap import mmap
-        f = open(filename, 'r+b')
-        try:
-            m = mmap(f.fileno(), 0)
-            try:
-                self.add_triples(*turtle.parseString(m, parseAll=True))
-            finally:
-                m.close()
-        finally:
-            f.close()
-        print 'done'
-            
+        for line in file:
+            tokens = triple.parseString(line)
+            self.add_triples(*tokens)
 
 
 def _matches(pattern, triple):
@@ -497,6 +482,6 @@ def run_prompt(store):
 
 if __name__ == '__main__':
     store = TripleStore()
-    if len(sys.argv) > 1:
-        store.import_file(sys.argv[1])
+    from fileinput import input
+    store.import_file(input())
     run_prompt(store)
