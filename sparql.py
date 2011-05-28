@@ -471,9 +471,9 @@ def run_prompt(store):
         def default(self, line):
             try:
                 q = store.query(line)
-                print q.variables
+                print u', '.join(v.name for v in q.variables)
                 for row in q:
-                    print row
+                    print u', '.join(repr(r) for r in row)
             except ParseException, p:
                 print p
     
