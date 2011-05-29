@@ -123,7 +123,7 @@ def _query_parser(store):
     limit = (CaselessKeyword('LIMIT').suppress() + Regex(r'\d+').setParseAction(lambda s, loc, toks: Limit(toks[0])))
     offset = (CaselessKeyword('OFFSET').suppress() + Regex(r'\d+').setParseAction(lambda s, loc, toks: Offset(toks[0])))
     
-    select_query = CaselessKeyword('SELECT') + \
+    select_query = Group(CaselessKeyword('SELECT').suppress() + Optional(CaselessKeyword('DISTINCT'))) + \
                    Group(variables | Keyword('*')) + \
                    CaselessKeyword('WHERE').suppress() + group_pattern + \
                    Optional(order_by) + \
@@ -144,8 +144,8 @@ def _uniq(l):
     return u
 
 class SelectQuery(object):
-    def __init__(self, name, variables, patterns, order_by, limit, offset):
-        self.name = name
+    def __init__(self, distinct, variables, patterns, order_by, limit, offset):
+        self.distinct = distinct
         if len(variables) == 1 and variables[0] == '*':
             variables = patterns.variables
         self.variables = tuple(_uniq(variables))
@@ -154,9 +154,19 @@ class SelectQuery(object):
         self.limit = limit
         self.offset = offset or 0
     
+    def _distinct(self, matches):
+        matches = sorted(matches)
+        prev = None
+        for m in matches:
+            if prev != m:
+                yield m
+            prev = m
+    
     def __iter__(self):
         variables = self.variables
         matches = self.patterns.match({})
+        if self.distinct:
+            matches = self._distinct(matches)
         if self.order_by is not None:
             matches = self.order_by.order(matches)
         
@@ -426,7 +436,7 @@ class TripleStore(object):
     def query(self, q):
         p = self.parse_query(q)
         q = p.query
-        name = q[0]
+        distinct = len(q[0]) == 1 and q[0][0].lower() == 'distinct'
         variables = q[1]
         patterns = q[2]
         
@@ -442,7 +452,7 @@ class TripleStore(object):
             elif isinstance(modifier, Offset):
                 offset = modifier.offset
         
-        return SelectQuery(name, variables, patterns, order_by, limit, offset)
+        return SelectQuery(distinct, variables, patterns, order_by, limit, offset)
     
     def import_file(self, file):
         triple = Group(_literal + _literal + _literal + Literal('.').suppress())
