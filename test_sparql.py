@@ -15,9 +15,8 @@ class TestParsing(unittest.TestCase):
         }""")
         
         self.assertTrue(hasattr(p, 'query'))
-        name, variables, pattern = p.query
-
-        self.assertEqual('SELECT', name)
+        _, variables, pattern = p.query
+        
         self.assertEqual(1, len(variables))
         self.assertTrue(isinstance(variables[0], VariableExpression))
         self.assertEquals('title', variables[0].name)
@@ -441,6 +440,12 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(
             [('b', 'name-b')],
             list(self.store.query('SELECT ?id ?name WHERE { ?id name ?name } ORDER BY ?name OFFSET 1'))
+        )
+    
+    def test_distinct(self):
+        self.assertEqual(
+            set([('a',), ('b',)]),
+            set(self.store.query('SELECT DISTINCT ?id WHERE { { ?id name ?name} UNION {?id weight ?weight} }'))
         )
 
 
