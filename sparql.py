@@ -483,14 +483,14 @@ class IndexedTripleStore(TripleStore):
                 index.insert(triple)
     
     def _find_index(self, pattern):
-        _key = tuple(i for (i,a) in enumerate(pattern) if a.resolve({}))
+        _key = tuple(i for (i,a) in enumerate(pattern) if a)
         return self._indexes[_key]
     
     def match_triples(self, pattern, existing=None):
         if existing is None:
             existing = {}
-        index = self._find_index(pattern)
         triple = tuple(a.resolve(existing) for a in pattern)
+        index = self._find_index(triple)
         for m in index.match(triple):
             matches = _get_matches(pattern, m)
             matches.update(existing)
