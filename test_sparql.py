@@ -475,19 +475,19 @@ class TestIndex(unittest.TestCase):
         index.insert(('a', 'b', 'b'))
         self.assertEqual(
             [('a', 'b', 'c')],
-            list(index.match((LiteralExpression('a'), LiteralExpression('b'), LiteralExpression('c'))))
+            list(index.match(('a', 'b', 'c')))
         )
         self.assertEqual(
             [],
-            list(index.match((LiteralExpression('a'), LiteralExpression('b'), LiteralExpression('d'))))
+            list(index.match(('a', 'b', 'd')))
         )
         self.assertEqual(
             [],
-            list(index.match((LiteralExpression('a'), LiteralExpression('d'), LiteralExpression('c'))))
+            list(index.match(('a', 'd', 'c')))
         )
         self.assertEqual(
             [],
-            list(index.match((LiteralExpression('d'), LiteralExpression('b'), LiteralExpression('c'))))
+            list(index.match(('d', 'b', 'c')))
         )
     
     def test_match_full(self):
@@ -503,20 +503,20 @@ class TestIndex(unittest.TestCase):
         self.assertEqual(
             set([('a', 'b', 'c'),
                  ('a', 'b', 'b')]),
-            set(self.index.match((LiteralExpression('a'), LiteralExpression('b'), VariableExpression('three'))))
+            set(self.index.match(('a', 'b', None)))
         )
         self.assertEqual(
             set([('a', 'b', 'c'),
                  ('a', 'b', 'b'),
                  ('a', 'a', 'b')]),
-            set(self.index.match((LiteralExpression('a'), VariableExpression('two'), VariableExpression('three'))))
+            set(self.index.match(('a', None, None)))
         )
         self.assertEqual(
             set([('a', 'b', 'c'),
                  ('c', 'c', 'c'),
                  ('a', 'b', 'b'),
                  ('a', 'a', 'b')]),
-            set(self.index.match((VariableExpression('one'), VariableExpression('two'), VariableExpression('three'))))
+            set(self.index.match((None, None, None)))
         )
     
     def test_key_error_if_not_indexed(self):
@@ -527,17 +527,17 @@ class TestIndex(unittest.TestCase):
         
         self.assertEqual(
             set([('a', 'b', 'c')]),
-            set(self.index2.match((LiteralExpression('a'), VariableExpression('one'), LiteralExpression('c'))))
+            set(self.index2.match(('a', None, 'c')))
         )
         
         try:
-            set(self.index2.match((LiteralExpression('a'), LiteralExpression('b'), VariableExpression('three'))))
+            set(self.index2.match(('a', 'b', None)))
             self.fail('This index should not work with provided match')
         except LookupError:
             pass
         
         try:
-            set(self.index2.match((VariableExpression('one'), LiteralExpression('b'), LiteralExpression('c'))))
+            set(self.index2.match((None, 'b', 'c')))
             self.fail('This index should not work with provided match')
         except LookupError:
             pass

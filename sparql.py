@@ -378,18 +378,19 @@ class Index(object):
             self._insert(subindex, key[1:], triple)
     
     def match(self, triple):
-        key = self._create_key(tuple(t.resolve({}) for t in triple))
+        key = self._create_key(triple)
         return self._match(self._index, key)
     
     def _match_remaining(self, index, key):
-        if key[0] is not None:
-            raise LookupError(key)
-        for v in index.values():
-            if getattr(v, 'values', None) is not None:
-                for m in self._match_remaining(v, key[1:]):
-                    yield m
-            else:
-                yield v
+        if len(key):
+            if key[0] is not None:
+                raise LookupError(key)
+            for v in index.values():
+                if getattr(v, 'values', None) is not None:
+                    for m in self._match_remaining(v, key[1:]):
+                        yield m
+                else:
+                    yield v
     
     def _match(self, index, key):
         if key[0] is None:
@@ -459,7 +460,41 @@ class TripleStore(object):
         
         for line in file:
             tokens = triple.parseString(line)
-            self.add_triples(*tokens)
+            self.add_triples(*[tuple(t) for t in tokens])
+
+
+class IndexedTripleStore(TripleStore):
+    
+    def __init__(self):
+        permutations = [(0, 1, 2), (0, 2, 1),
+                        (1, 0, 2), (1, 2, 0),
+                        (2, 1, 0), (2, 0, 1)]
+        self._indexes = {}
+        for p in permutations:
+            index = Index(p)
+            self._indexes[p] = index
+            self._indexes[p[:2]] = index
+            self._indexes[p[:1]] = index
+            self._indexes[()] = index
+    
+    def add_triples(self, *triples):
+        for index in set(self._indexes.values()):
+            for triple in triples:
+                index.insert(triple)
+    
+    def _find_index(self, pattern):
+        _key = tuple(i for (i,a) in enumerate(pattern) if a.resolve({}))
+        return self._indexes[_key]
+    
+    def match_triples(self, pattern, existing=None):
+        if existing is None:
+            existing = {}
+        index = self._find_index(pattern)
+        triple = tuple(a.resolve(existing) for a in pattern)
+        for m in index.match(triple):
+            matches = _get_matches(pattern, m)
+            matches.update(existing)
+            yield matches
 
 
 def _matches(pattern, triple):
@@ -497,10 +532,14 @@ if __name__ == '__main__':
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option('-e', dest='script', default='', help='script to execute')
+    parser.add_option('-n', action="store_false", dest="use_index", default=True, help='disable indexes')
     options, args = parser.parse_args()
     script = options.script
     
-    store = TripleStore()
+    if options.use_index:
+        store = IndexedTripleStore()
+    else:
+        store = TripleStore()
     from fileinput import input
     if not script and args:
         store.import_file(input(args))
