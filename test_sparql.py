@@ -456,6 +456,10 @@ class TestQuery(unittest.TestCase):
             [(100,)],
             list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 100) }'))
         )
+        self.assertEqual(
+            [(100,)],
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 2*50) }'))
+        )
         
     def test_order_by(self):
         self.assertEqual(

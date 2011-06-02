@@ -114,12 +114,9 @@ def _query_parser(store):
     optional_graph_pattern = (CaselessKeyword('OPTIONAL').suppress() + group_pattern) \
                                 .setParseAction(lambda s, loc, toks: OptionalGroup(toks[0]))
     
-    binary_operator = _create_binary_operator()
+    comparison_expression = _comparison_parser()
     
-    binary_expression = (triple_value + binary_operator + triple_value) \
-                            .setParseAction(lambda s, loc, toks: BooleanExpression(*toks))
-    
-    filter_expression = Literal('(').suppress() + binary_expression + Literal(')').suppress()
+    filter_expression = Literal('(').suppress() + comparison_expression + Literal(')').suppress()
     
     filter_pattern = (CaselessKeyword('FILTER').suppress() + filter_expression) \
                         .setParseAction(lambda s, loc, toks: Filter(toks[0]))
@@ -307,7 +304,7 @@ class Filter(object):
 
     def match(self, solution):
         try:
-            if self.expression.matches(solution):
+            if self.expression.resolve(solution):
                 yield solution
         except TypeError:
             pass
@@ -318,21 +315,6 @@ class Filter(object):
 
 class Expression(object):
     pass
-
-
-class BooleanExpression(Expression):
-    def __init__(self, lhs, operator, rhs):
-        self.lhs = lhs
-        self.operator = operator
-        self.rhs = rhs
-    
-    def matches(self, solution):
-        a = self.lhs.resolve(solution)
-        b = self.rhs.resolve(solution)
-        return self.operator(a, b)
-    
-    def __repr__(self):
-        return u'%s %s %s' % (self.lhs, self.operator.__name__, self.rhs)
 
 
 class BinaryOperatorExpression(Expression):
