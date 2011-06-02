@@ -1,6 +1,7 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       Optional, ZeroOrMore, CaselessKeyword, Keyword, Forward, \
-                      delimitedList, ParseException, QuotedString
+                      delimitedList, ParseException, QuotedString, \
+                      operatorPrecedence, opAssoc
 
 import sys
 import operator
@@ -32,6 +33,30 @@ def _create_binary_operator():
 
 def _operator_keyword(symbol, op):
     return Keyword(symbol).setParseAction(lambda s, loc, toks: op)
+
+def _expression_parser():
+    variable = Combine(Literal('?').suppress() + Word(alphas)) \
+                .setParseAction(lambda s, loc, toks: VariableExpression(toks[0]))
+    literal = _literal.copy().setParseAction(lambda s, loc, toks: LiteralExpression(toks[0]))
+    
+    def binOpAction(s, loc, toks):
+        group = toks[0]
+        lhs, op, rhs = group
+        return BinaryOperatorExpression(lhs, op, rhs)
+    
+    value = variable | literal
+    
+    arithmetic = operatorPrecedence(value, [
+        (c, 2, opAssoc.LEFT, binOpAction) for c in ['*', '/', '+', '-']
+    ])
+    
+    return arithmetic
+    
+    #comparisons = operatorPrecedence(value, [
+    #    (c, 2, opAssoc.LEFT, parseAction) for c in ['<=', '>=', '=', '!=', '<', '>']
+    #])
+    
+    #return comparisons
 
 def _query_parser(store):
     prefixes = {}
@@ -304,6 +329,26 @@ class BooleanExpression(Expression):
     
     def __repr__(self):
         return u'%s %s %s' % (self.lhs, self.operator.__name__, self.rhs)
+
+
+class BinaryOperatorExpression(Expression):
+    def __init__(self, lhs, op, rhs):
+        operators = dict([('<=', operator.le), ('>=', operator.ge),
+                         ('<', operator.lt), ('>', operator.gt),
+                         ('=', operator.eq), ('!=', operator.ne),
+                         ('+', operator.add), ('-', operator.sub),
+                         ('*', operator.mul), ('/', operator.div)])
+        self.lhs = lhs
+        self.operator = operators.get(op)
+        self.rhs = rhs
+
+    def resolve(self, solution):
+        a = self.lhs.resolve(solution)
+        b = self.rhs.resolve(solution)
+        return self.operator(a, b)
+
+    def __repr__(self):
+        return u'(%s %s %s)' % (self.lhs, self.operator.__name__, self.rhs)
 
 
 class VariableExpression(Expression):

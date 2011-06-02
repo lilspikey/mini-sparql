@@ -55,7 +55,24 @@ class TestParsing(unittest.TestCase):
         self.assertEquals('x', triple[0].name)
         self.assertEqual('http://xmlns.com/foaf/0.1/name', triple[1].value)
         self.assertTrue(isinstance(triple[2], VariableExpression))
-        self.assertEquals('name', triple[2].name)
+        self.assertEqual('name', triple[2].name)
+
+
+class TestExpressionParser(unittest.TestCase):
+    
+    def test_expression_parser_arthimetic(self):
+        from sparql import _expression_parser
+        p = _expression_parser()
+        toks = p.parseString('?a + ?b * 2')
+        self.assertTrue(toks is not None)
+        self.assertEqual(1, len(toks))
+        e = toks[0]
+        self.assertEqual(1, e.resolve(dict(a=1, b=0)))
+        self.assertEqual(2, e.resolve(dict(a=2, b=0)))
+        self.assertEqual(2, e.resolve(dict(a=0, b=1)))
+        self.assertEqual(4, e.resolve(dict(a=0, b=2)))
+        self.assertEqual(5, e.resolve(dict(a=1, b=2)))
+        self.assertEqual(10, e.resolve(dict(a=2, b=4)))
 
 
 class TestMatchTriples(unittest.TestCase):
