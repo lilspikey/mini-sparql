@@ -34,29 +34,33 @@ def _create_binary_operator():
 def _operator_keyword(symbol, op):
     return Keyword(symbol).setParseAction(lambda s, loc, toks: op)
 
-def _expression_parser():
+def _binOpAction(s, loc, toks):
+    group = toks[0]
+    lhs, op, rhs = group
+    return BinaryOperatorExpression(lhs, op, rhs)
+
+def _arithmetic_parser():
     variable = Combine(Literal('?').suppress() + Word(alphas)) \
                 .setParseAction(lambda s, loc, toks: VariableExpression(toks[0]))
     literal = _literal.copy().setParseAction(lambda s, loc, toks: LiteralExpression(toks[0]))
-    
-    def binOpAction(s, loc, toks):
-        group = toks[0]
-        lhs, op, rhs = group
-        return BinaryOperatorExpression(lhs, op, rhs)
-    
+        
     value = variable | literal
     
     arithmetic = operatorPrecedence(value, [
-        (c, 2, opAssoc.LEFT, binOpAction) for c in ['*', '/', '+', '-']
+        (c, 2, opAssoc.LEFT, _binOpAction) for c in ['*', '/', '+', '-']
     ])
-    
     return arithmetic
+
+
+def _comparison_parser():
+    arithmetic = _arithmetic_parser()
+    binary_operator = Literal('<=') | Literal('>=') | Literal('<') | \
+                      Literal('>') | Literal('=') | Literal('!=')
+
+    comparison = (arithmetic + binary_operator + arithmetic) \
+                    .setParseAction(lambda s, loc, toks: BinaryOperatorExpression(*toks))
     
-    #comparisons = operatorPrecedence(value, [
-    #    (c, 2, opAssoc.LEFT, parseAction) for c in ['<=', '>=', '=', '!=', '<', '>']
-    #])
-    
-    #return comparisons
+    return comparison
 
 def _query_parser(store):
     prefixes = {}
