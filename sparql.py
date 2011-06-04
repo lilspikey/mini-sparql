@@ -3,6 +3,7 @@ from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       delimitedList, ParseException, QuotedString, \
                       operatorPrecedence, opAssoc, oneOf
 
+import re
 import sys
 import operator
 from itertools import islice
@@ -34,7 +35,10 @@ def _expression_parser():
     
     expr=Forward()
     exprList = delimitedList(expr)
-    funcCall = Word(alphas + "_") + '(' + Optional(exprList) + ')'
+    funcCall = (Word(alphas + "_") + \
+                Literal('(').suppress() + \
+                Optional(exprList) + \
+                Literal(')').suppress()) .setParseAction(lambda s, loc, toks: FunctionCallExpression(toks[0], toks[1:]))
     baseExpr = funcCall | value
     
     expr << operatorPrecedence(baseExpr,[
@@ -47,7 +51,7 @@ def _expression_parser():
         ('&&', 2, opAssoc.LEFT, _binOpAction),
         ('||', 2, opAssoc.LEFT, _binOpAction),
     ])
-    return expr
+    return (Literal('(').suppress() + expr + Literal(')').suppress()) | funcCall
 
 def _query_parser(store):
     prefixes = {}
@@ -101,9 +105,7 @@ def _query_parser(store):
     optional_graph_pattern = (CaselessKeyword('OPTIONAL').suppress() + group_pattern) \
                                 .setParseAction(lambda s, loc, toks: OptionalGroup(toks[0]))
     
-    expression = _expression_parser()
-    
-    filter_expression = Literal('(').suppress() + expression + Literal(')').suppress()
+    filter_expression = _expression_parser()
     
     filter_pattern = (CaselessKeyword('FILTER').suppress() + filter_expression) \
                         .setParseAction(lambda s, loc, toks: Filter(toks[0]))
@@ -300,21 +302,49 @@ class Filter(object):
         return 'Filter(%r)' % (self.expression)
 
 
+def regex(s, pattern, flags=None):
+    f = 0
+    if flags is not None:
+        flags = flags.lower()
+    
+        for ch, fl in (('i', re.I), ('s', re.S), ('m', re.M), ('x', re.X)):
+            if ch in flags:
+                f |= fl
+    return re.search(pattern, s, f) is not None
+
+
 class Expression(object):
     pass
 
 
+class FunctionCallExpression(Expression):
+    FUNCTIONS = {
+        'bound': lambda a: a is not None,
+        'isblank': lambda a: a == '',
+        'str': unicode,
+        'regex': regex,
+    }
+    def __init__(self, fn, args):
+        self.fn = self.FUNCTIONS[(fn.lower())]
+        self.args = args
+    
+    def resolve(self, solution):
+        args = tuple(a.resolve(solution) for a in self.args)
+        return self.fn(*args)
+
+
 class BinaryOperatorExpression(Expression):
-    def __init__(self, lhs, op, rhs):
-        operators = dict([('<=', operator.le), ('>=', operator.ge),
-                         ('<', operator.lt), ('>', operator.gt),
-                         ('=', operator.eq), ('!=', operator.ne),
-                         ('+', operator.add), ('-', operator.sub),
-                         ('*', operator.mul), ('/', operator.div),
-                         ('&&', lambda a,b: a and b),
-                         ('||', lambda a,b: a or b)])
+    OPERATORS = dict([('<=', operator.le), ('>=', operator.ge),
+                     ('<', operator.lt), ('>', operator.gt),
+                     ('=', operator.eq), ('!=', operator.ne),
+                     ('+', operator.add), ('-', operator.sub),
+                     ('*', operator.mul), ('/', operator.div),
+                     ('&&', lambda a,b: a and b),
+                     ('||', lambda a,b: a or b)])
+    
+    def __init__(self, lhs, op, rhs):    
         self.lhs = lhs
-        self.operator = operators.get(op)
+        self.operator = self.OPERATORS[op]
         self.rhs = rhs
 
     def resolve(self, solution):

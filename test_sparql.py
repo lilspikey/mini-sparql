@@ -63,7 +63,7 @@ class TestExpressionParser(unittest.TestCase):
     def test__arithmetic_parsing(self):
         from sparql import _expression_parser
         p = _expression_parser()
-        toks = p.parseString('?a + ?b * 2')
+        toks = p.parseString('(?a + ?b * 2)')
         self.assertTrue(toks is not None)
         self.assertEqual(1, len(toks))
         e = toks[0]
@@ -77,7 +77,7 @@ class TestExpressionParser(unittest.TestCase):
     def test__comparison_parsing(self):
         from sparql import _expression_parser
         p = _expression_parser()
-        toks = p.parseString('?a < 10')
+        toks = p.parseString('(?a < 10)')
         self.assertTrue(toks is not None)
         self.assertEqual(1, len(toks))
         e = toks[0]
@@ -88,7 +88,7 @@ class TestExpressionParser(unittest.TestCase):
     def test__comparison_paring_with_arithmetic(self):
         from sparql import _expression_parser
         p = _expression_parser()
-        toks = p.parseString('2 * ?a < 10')
+        toks = p.parseString('(2 * ?a < 10)')
         self.assertTrue(toks is not None)
         self.assertEqual(1, len(toks))
         e = toks[0]
@@ -101,10 +101,39 @@ class TestExpressionParser(unittest.TestCase):
     def test__boolean_expression_parsing(self):
         from sparql import _expression_parser
         p = _expression_parser()
-        for expr, a, expected in [('2 * ?a < 10', 4, True),
-                                  ('2 * ?a < 10', 5, False),
-                                  ('2 * ?a < 10 && ?a > 3', 3, False),
-                                  ('2 * ?a < 10 || ?a > 3', 3, True)]: 
+        for expr, a, expected in [('(2 * ?a < 10)', 4, True),
+                                  ('(2 * ?a < 10)', 5, False),
+                                  ('(2 * ?a < 10 && ?a > 3)', 3, False),
+                                  ('(2 * ?a < 10 || ?a > 3)', 3, True)]: 
+            toks = p.parseString(expr)
+            self.assertTrue(toks is not None)
+            self.assertEqual(1, len(toks))
+            e = toks[0]
+            self.assertEqual(expected, e.resolve(dict(a=a)))
+    
+    def test__function_parsing(self):
+        from sparql import _expression_parser
+        p = _expression_parser()
+        for expr, a, expected in [('bound(?a)', None, False),
+                                  ('bound(?a)', 'h', True),
+                                  ('isBlank(?a)', '', True),
+                                  ('isBlank(?a)', 'f', False)]:
+            toks = p.parseString(expr)
+            self.assertTrue(toks is not None)
+            self.assertEqual(1, len(toks))
+            e = toks[0]
+            self.assertEqual(expected, e.resolve(dict(a=a)))
+
+    def test__regex_parsing(self):
+        from sparql import _expression_parser
+        p = _expression_parser()
+        for expr, a, expected in [('regex(?a, "yes")', "yes", True),
+                                  ('regex(?a, "no")', "yes", False),
+                                  ('regex(?a, "^start")', "starting", True),
+                                  ('regex(?a, "^start")', "not starting", False),
+                                  ('regex(?a, "end$")', "does end", True),
+                                  ('regex(?a, "end$")', "neverending", False),
+                                  ('regex(?a, "UPPER", "i")', "upper", True)]:
             toks = p.parseString(expr)
             self.assertTrue(toks is not None)
             self.assertEqual(1, len(toks))
