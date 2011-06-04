@@ -19,20 +19,6 @@ _boolean = (Keyword('true') | Keyword('false')).setParseAction(lambda s, loc, to
 
 _literal = _number | _string | _iri | _boolean | Word(alphas)
 
-def _create_binary_operator():
-    existing = None
-    for symbol, op in (('<=', operator.le), ('>=', operator.ge),
-                       ('<', operator.lt), ('>', operator.gt),
-                       ('=', operator.eq), ('!=', operator.ne)):
-        bop = _operator_keyword(symbol, op)
-        if not existing:
-            existing = bop
-        else:
-            existing = existing | bop
-    return existing
-
-def _operator_keyword(symbol, op):
-    return Keyword(symbol).setParseAction(lambda s, loc, toks: op)
 
 def _binOpAction(s, loc, toks):
     group = toks[0]
@@ -61,6 +47,14 @@ def _comparison_parser():
                     .setParseAction(lambda s, loc, toks: BinaryOperatorExpression(*toks))
     
     return comparison
+
+def _boolean_expression_parser():
+    comparison = _comparison_parser()
+    
+    boolean = operatorPrecedence(comparison, [
+        (c, 2, opAssoc.LEFT, _binOpAction) for c in ['&&', '||']
+    ])
+    return boolean
 
 def _query_parser(store):
     prefixes = {}
@@ -114,9 +108,9 @@ def _query_parser(store):
     optional_graph_pattern = (CaselessKeyword('OPTIONAL').suppress() + group_pattern) \
                                 .setParseAction(lambda s, loc, toks: OptionalGroup(toks[0]))
     
-    comparison_expression = _comparison_parser()
+    boolean_expression = _boolean_expression_parser()
     
-    filter_expression = Literal('(').suppress() + comparison_expression + Literal(')').suppress()
+    filter_expression = Literal('(').suppress() + boolean_expression + Literal(')').suppress()
     
     filter_pattern = (CaselessKeyword('FILTER').suppress() + filter_expression) \
                         .setParseAction(lambda s, loc, toks: Filter(toks[0]))
@@ -323,7 +317,9 @@ class BinaryOperatorExpression(Expression):
                          ('<', operator.lt), ('>', operator.gt),
                          ('=', operator.eq), ('!=', operator.ne),
                          ('+', operator.add), ('-', operator.sub),
-                         ('*', operator.mul), ('/', operator.div)])
+                         ('*', operator.mul), ('/', operator.div),
+                         ('&&', lambda a,b: a and b),
+                         ('||', lambda a,b: a or b)])
         self.lhs = lhs
         self.operator = operators.get(op)
         self.rhs = rhs

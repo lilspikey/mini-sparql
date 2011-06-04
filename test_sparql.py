@@ -97,6 +97,19 @@ class TestExpressionParser(unittest.TestCase):
         self.assertFalse(e.resolve(dict(a=5)))
         self.assertFalse(e.resolve(dict(a=9)))
         self.assertFalse(e.resolve(dict(a=10)))
+    
+    def test__boolean_expression_parser(self):
+        from sparql import _boolean_expression_parser
+        p = _boolean_expression_parser()
+        for expr, a, expected in [('2 * ?a < 10', 4, True),
+                                  ('2 * ?a < 10', 5, False),
+                                  ('2 * ?a < 10 && ?a > 3', 3, False),
+                                  ('2 * ?a < 10 || ?a > 3', 3, True)]: 
+            toks = p.parseString(expr)
+            self.assertTrue(toks is not None)
+            self.assertEqual(1, len(toks))
+            e = toks[0]
+            self.assertEqual(expected, e.resolve(dict(a=a)))
 
 
 class TestMatchTriples(unittest.TestCase):
