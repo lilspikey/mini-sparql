@@ -1,7 +1,9 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       Optional, ZeroOrMore, CaselessKeyword, Keyword, Forward, \
                       delimitedList, ParseException, QuotedString, \
-                      operatorPrecedence, opAssoc, oneOf
+                      operatorPrecedence, opAssoc, oneOf, ParserElement
+
+ParserElement.enablePackrat()
 
 import re
 import sys
@@ -26,6 +28,11 @@ def _binOpAction(s, loc, toks):
     lhs, op, rhs = group
     return BinaryOperatorExpression(lhs, op, rhs)
 
+def _unaryOpAction(s, loc, toks):
+    group = toks[0]
+    op, rhs = group
+    return UnaryOperatorExpression(op, rhs)
+
 def _expression_parser():
     variable = Combine(Literal('?').suppress() + Word(alphas)) \
                 .setParseAction(lambda s, loc, toks: VariableExpression(toks[0]))
@@ -42,8 +49,8 @@ def _expression_parser():
     baseExpr = funcCall | value
     
     expr << operatorPrecedence(baseExpr,[
-        #(oneOf('!'),1,opAssoc.RIGHT),
-        #(oneOf('+ -'),1,opAssoc.RIGHT),#sign
+        (oneOf('!'), 1, opAssoc.RIGHT, _unaryOpAction),
+        (oneOf('+ -'), 1, opAssoc.RIGHT, _unaryOpAction),
         (oneOf('* /'), 2, opAssoc.LEFT, _binOpAction),
         (oneOf('+ -'), 2, opAssoc.LEFT, _binOpAction),
         (oneOf('<= >= < >'), 2, opAssoc.LEFT, _binOpAction),
@@ -331,6 +338,20 @@ class FunctionCallExpression(Expression):
     def resolve(self, solution):
         args = tuple(a.resolve(solution) for a in self.args)
         return self.fn(*args)
+
+
+class UnaryOperatorExpression(Expression):
+    OPERATORS = { '!': operator.not_,
+                  '-': operator.neg,
+                  '+': operator.pos }
+    
+    def __init__(self, op, rhs):
+        self.operator = self.OPERATORS[op]
+        self.rhs = rhs
+    
+    def resolve(self, solution):
+        a = self.rhs.resolve(solution)
+        return self.operator(a)
 
 
 class BinaryOperatorExpression(Expression):
