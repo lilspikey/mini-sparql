@@ -1,7 +1,7 @@
 from pyparsing import Word, OneOrMore, alphas, Combine, Regex, Group, Literal, \
                       Optional, ZeroOrMore, CaselessKeyword, Keyword, Forward, \
                       delimitedList, ParseException, QuotedString, \
-                      operatorPrecedence, opAssoc
+                      operatorPrecedence, opAssoc, oneOf
 
 import sys
 import operator
@@ -25,36 +25,29 @@ def _binOpAction(s, loc, toks):
     lhs, op, rhs = group
     return BinaryOperatorExpression(lhs, op, rhs)
 
-def _arithmetic_parser():
+def _expression_parser():
     variable = Combine(Literal('?').suppress() + Word(alphas)) \
                 .setParseAction(lambda s, loc, toks: VariableExpression(toks[0]))
     literal = _literal.copy().setParseAction(lambda s, loc, toks: LiteralExpression(toks[0]))
         
     value = variable | literal
     
-    arithmetic = operatorPrecedence(value, [
-        (c, 2, opAssoc.LEFT, _binOpAction) for c in ['*', '/', '+', '-']
-    ])
-    return arithmetic
-
-
-def _comparison_parser():
-    arithmetic = _arithmetic_parser()
-    binary_operator = Literal('<=') | Literal('>=') | Literal('<') | \
-                      Literal('>') | Literal('=') | Literal('!=')
-
-    comparison = (arithmetic + binary_operator + arithmetic) \
-                    .setParseAction(lambda s, loc, toks: BinaryOperatorExpression(*toks))
+    expr=Forward()
+    exprList = delimitedList(expr)
+    funcCall = Word(alphas + "_") + '(' + Optional(exprList) + ')'
+    baseExpr = funcCall | value
     
-    return comparison
-
-def _boolean_expression_parser():
-    comparison = _comparison_parser()
-    
-    boolean = operatorPrecedence(comparison, [
-        (c, 2, opAssoc.LEFT, _binOpAction) for c in ['&&', '||']
+    expr << operatorPrecedence(baseExpr,[
+        #(oneOf('!'),1,opAssoc.RIGHT),
+        #(oneOf('+ -'),1,opAssoc.RIGHT),#sign
+        (oneOf('* /'), 2, opAssoc.LEFT, _binOpAction),
+        (oneOf('+ -'), 2, opAssoc.LEFT, _binOpAction),
+        (oneOf('<= >= < >'), 2, opAssoc.LEFT, _binOpAction),
+        (oneOf('= !='), 2, opAssoc.LEFT, _binOpAction),
+        ('&&', 2, opAssoc.LEFT, _binOpAction),
+        ('||', 2, opAssoc.LEFT, _binOpAction),
     ])
-    return boolean
+    return expr
 
 def _query_parser(store):
     prefixes = {}
@@ -108,9 +101,9 @@ def _query_parser(store):
     optional_graph_pattern = (CaselessKeyword('OPTIONAL').suppress() + group_pattern) \
                                 .setParseAction(lambda s, loc, toks: OptionalGroup(toks[0]))
     
-    boolean_expression = _boolean_expression_parser()
+    expression = _expression_parser()
     
-    filter_expression = Literal('(').suppress() + boolean_expression + Literal(')').suppress()
+    filter_expression = Literal('(').suppress() + expression + Literal(')').suppress()
     
     filter_pattern = (CaselessKeyword('FILTER').suppress() + filter_expression) \
                         .setParseAction(lambda s, loc, toks: Filter(toks[0]))

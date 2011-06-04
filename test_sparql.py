@@ -60,9 +60,9 @@ class TestParsing(unittest.TestCase):
 
 class TestExpressionParser(unittest.TestCase):
     
-    def test__arithmetic_parser(self):
-        from sparql import _arithmetic_parser
-        p = _arithmetic_parser()
+    def test__arithmetic_parsing(self):
+        from sparql import _expression_parser
+        p = _expression_parser()
         toks = p.parseString('?a + ?b * 2')
         self.assertTrue(toks is not None)
         self.assertEqual(1, len(toks))
@@ -74,9 +74,9 @@ class TestExpressionParser(unittest.TestCase):
         self.assertEqual(5, e.resolve(dict(a=1, b=2)))
         self.assertEqual(10, e.resolve(dict(a=2, b=4)))
 
-    def test__comparison_parser(self):
-        from sparql import _comparison_parser
-        p = _comparison_parser()
+    def test__comparison_parsing(self):
+        from sparql import _expression_parser
+        p = _expression_parser()
         toks = p.parseString('?a < 10')
         self.assertTrue(toks is not None)
         self.assertEqual(1, len(toks))
@@ -85,9 +85,9 @@ class TestExpressionParser(unittest.TestCase):
         self.assertTrue(e.resolve(dict(a=9)))
         self.assertFalse(e.resolve(dict(a=10)))
 
-    def test__comparison_parser_with_arithmetic(self):
-        from sparql import _comparison_parser
-        p = _comparison_parser()
+    def test__comparison_paring_with_arithmetic(self):
+        from sparql import _expression_parser
+        p = _expression_parser()
         toks = p.parseString('2 * ?a < 10')
         self.assertTrue(toks is not None)
         self.assertEqual(1, len(toks))
@@ -98,9 +98,9 @@ class TestExpressionParser(unittest.TestCase):
         self.assertFalse(e.resolve(dict(a=9)))
         self.assertFalse(e.resolve(dict(a=10)))
     
-    def test__boolean_expression_parser(self):
-        from sparql import _boolean_expression_parser
-        p = _boolean_expression_parser()
+    def test__boolean_expression_parsing(self):
+        from sparql import _expression_parser
+        p = _expression_parser()
         for expr, a, expected in [('2 * ?a < 10', 4, True),
                                   ('2 * ?a < 10', 5, False),
                                   ('2 * ?a < 10 && ?a > 3', 3, False),
