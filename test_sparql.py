@@ -648,7 +648,62 @@ class TestIndex(unittest.TestCase):
             self.fail('This index should not work with provided match')
         except LookupError:
             pass
-    
 
+
+class TestPackratDoesNotCauseProblems(unittest.TestCase):
+    '''
+    Packrat speeds up parsing, by memoisation, so check
+    that this does not cause any side-effects
+    '''
+    
+    def setUp(self):
+        self.store1 = IndexedTripleStore()
+        self.store2 = IndexedTripleStore()
+        
+        self.store1.add_triples(('a1', 'http://xmlns.com/foaf/0.1/name', 'name-a1'))
+        self.store2.add_triples(('a2', 'foaf:name', 'name-a2'))
+    
+    def test_prefixes_not_cached(self):
+        p1 = self.store1.parse_query("""PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+        SELECT ?x ?name
+        WHERE  { ?x foaf:name ?name }""")
+        
+        name, variables, pattern = p1.query
+        
+        self.assertTrue(isinstance(pattern, Pattern))
+        triple = pattern.pattern
+        self.assertTrue(isinstance(triple[0], VariableExpression))
+        self.assertEquals('x', triple[0].name)
+        self.assertEqual('http://xmlns.com/foaf/0.1/name', triple[1].value)
+        self.assertTrue(isinstance(triple[2], VariableExpression))
+        self.assertEqual('name', triple[2].name)
+        
+        p2 = self.store2.parse_query("""
+                SELECT ?x ?name
+                WHERE  { ?x foaf:name ?name }""")
+        
+        name, variables, pattern = p2.query
+        
+        self.assertTrue(isinstance(pattern, Pattern))
+        triple = pattern.pattern
+        self.assertTrue(isinstance(triple[0], VariableExpression))
+        self.assertEquals('x', triple[0].name)
+        self.assertEqual('foaf:name', triple[1].value)
+        self.assertTrue(isinstance(triple[2], VariableExpression))
+        self.assertEqual('name', triple[2].name)
+    
+    def test_store_not_cached(self):
+        q1 = self.store1.query("""
+            SELECT ?x ?property ?name
+            WHERE  { ?x ?property ?name }""")
+        self.assertEqual([('a1', 'http://xmlns.com/foaf/0.1/name', 'name-a1')],
+                         list(q1))
+
+        q2 = self.store2.query("""
+             SELECT ?x ?property ?name
+             WHERE  { ?x ?property ?name }""")
+        self.assertEqual([('a2', 'foaf:name', 'name-a2')],
+                          list(q2))
+    
 if __name__ == '__main__':
     unittest.main()
