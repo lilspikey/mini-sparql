@@ -104,7 +104,8 @@ class TestExpressionParser(unittest.TestCase):
         for expr, a, expected in [('(2 * ?a < 10)', 4, True),
                                   ('(2 * ?a < 10)', 5, False),
                                   ('(2 * ?a < 10 && ?a > 3)', 3, False),
-                                  ('(2 * ?a < 10 || ?a > 3)', 3, True)]: 
+                                  ('(2 * ?a < 10 || ?a > 3)', 3, True),
+                                  ('(!(2 * ?a < 10))', 4, False)]: 
             toks = p.parseString(expr)
             self.assertTrue(toks is not None)
             self.assertEqual(1, len(toks))
