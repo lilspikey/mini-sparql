@@ -1,4 +1,4 @@
-from sparql import TripleStore, Pattern, PatternGroup, OptionalGroup, \
+from minisparql import TripleStore, Pattern, PatternGroup, OptionalGroup, \
                    UnionGroup, Index, VariableExpression, LiteralExpression, \
                    IndexedTripleStore
 import unittest
@@ -62,7 +62,7 @@ class TestParsing(unittest.TestCase):
 class TestExpressionParser(unittest.TestCase):
     
     def test__arithmetic_parsing(self):
-        from sparql import _expression_parser
+        from minisparql import _expression_parser
         p = _expression_parser()
         toks = p.parseString('(?a + ?b * 2)')
         self.assertTrue(toks is not None)
@@ -76,7 +76,7 @@ class TestExpressionParser(unittest.TestCase):
         self.assertEqual(10, e.resolve(dict(a=2, b=4)))
 
     def test__comparison_parsing(self):
-        from sparql import _expression_parser
+        from minisparql import _expression_parser
         p = _expression_parser()
         toks = p.parseString('(?a < 10)')
         self.assertTrue(toks is not None)
@@ -87,7 +87,7 @@ class TestExpressionParser(unittest.TestCase):
         self.assertFalse(e.resolve(dict(a=10)))
 
     def test__comparison_paring_with_arithmetic(self):
-        from sparql import _expression_parser
+        from minisparql import _expression_parser
         p = _expression_parser()
         toks = p.parseString('(2 * ?a < 10)')
         self.assertTrue(toks is not None)
@@ -100,7 +100,7 @@ class TestExpressionParser(unittest.TestCase):
         self.assertFalse(e.resolve(dict(a=10)))
     
     def test__boolean_expression_parsing(self):
-        from sparql import _expression_parser
+        from minisparql import _expression_parser
         p = _expression_parser()
         for expr, a, expected in [('(2 * ?a < 10)', 4, True),
                                   ('(2 * ?a < 10)', 5, False),
@@ -114,7 +114,7 @@ class TestExpressionParser(unittest.TestCase):
             self.assertEqual(expected, e.resolve(dict(a=a)))
     
     def test__function_parsing(self):
-        from sparql import _expression_parser
+        from minisparql import _expression_parser
         p = _expression_parser()
         for expr, a, expected in [('bound(?a)', None, False),
                                   ('bound(?a)', 'h', True),
@@ -127,7 +127,7 @@ class TestExpressionParser(unittest.TestCase):
             self.assertEqual(expected, e.resolve(dict(a=a)))
 
     def test__regex_parsing(self):
-        from sparql import _expression_parser
+        from minisparql import _expression_parser
         p = _expression_parser()
         for expr, a, expected in [('regex(?a, "yes")', "yes", True),
                                   ('regex(?a, "no")', "yes", False),
