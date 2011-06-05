@@ -1,5 +1,6 @@
 from sparql import TripleStore, Pattern, PatternGroup, OptionalGroup, \
-                   UnionGroup, Index, VariableExpression, LiteralExpression
+                   UnionGroup, Index, VariableExpression, LiteralExpression, \
+                   IndexedTripleStore
 import unittest
 
 class TestParsing(unittest.TestCase):
@@ -143,16 +144,19 @@ class TestExpressionParser(unittest.TestCase):
 
 
 class TestMatchTriples(unittest.TestCase):
+    store = TripleStore()
     
-    def setUp(self):
-        self.store = TripleStore()
+    def _check_same_contents(self, expected, results):
+        expected.sort()
+        results.sort()
+        self.assertEqual(expected, results)
     
     def test_match_triples(self):
         self.store.add_triples(('a', 'name', 'c'),
                                ('b', 'name', 'd'),
                                ('a', 'weight', 'c'))
         
-        self.assertEqual([{}],
+        self._check_same_contents([{}],
             list(self.store.match_triples(
                     (
                         LiteralExpression('a'),
@@ -160,7 +164,7 @@ class TestMatchTriples(unittest.TestCase):
                         LiteralExpression('c')))
                     )
                 )
-        self.assertEqual([dict(value='c')],
+        self._check_same_contents([dict(value='c')],
                          list(self.store.match_triples(
                             (
                                 LiteralExpression('a'),
@@ -168,7 +172,7 @@ class TestMatchTriples(unittest.TestCase):
                                 VariableExpression('value')
                             )
                         )))
-        self.assertEqual([dict(id='a', value='c'),
+        self._check_same_contents([dict(id='a', value='c'),
                           dict(id='b', value='d')],
                          list(self.store.match_triples(
                                 (
@@ -177,7 +181,7 @@ class TestMatchTriples(unittest.TestCase):
                                     VariableExpression('value')
                                 )
                         )))
-        self.assertEqual([dict(id='a', property='name', value='c'),
+        self._check_same_contents([dict(id='a', property='name', value='c'),
                           dict(id='b', property='name', value='d'),
                           dict(id='a', property='weight', value='c')],
                          list(self.store.match_triples(
@@ -187,6 +191,11 @@ class TestMatchTriples(unittest.TestCase):
                                         VariableExpression('value')
                                     )
                             )))
+
+
+class TestMatchTriplesIndexed(TestMatchTriples):
+    store = IndexedTripleStore()
+
 
 class TestPattern(unittest.TestCase):
     
