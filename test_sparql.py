@@ -502,6 +502,16 @@ class TestQuery(unittest.TestCase):
             [(100,)],
             list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER (?height = 2*50) }'))
         )
+    
+    def test_complex_filter(self):
+        self.assertEqual(
+            [('b', 'name', 'name-b')],
+            list(self.store.query('SELECT ?id ?property ?value WHERE { ?id ?property ?value FILTER (regex(?value, "^name-") && ?id != "a")}'))
+        )
+        self.assertEqual(
+            [(100,)],
+            list(self.store.query('SELECT ?height WHERE { ?id height ?height FILTER ((2* -?height) = 2* -100) }'))
+        )
         
     def test_order_by(self):
         self.assertEqual(
